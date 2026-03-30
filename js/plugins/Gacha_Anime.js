@@ -1915,7 +1915,7 @@
                 state.enterBaseY      = state.baseCenterY;
             }
 
-            if (state.awaitFinalInput && Input.isTriggered("ok")) {
+            if (state.awaitFinalInput && (Input.isTriggered("ok") || TouchInput.isTriggered())) {
                 if (SE_SPACE_OK) AudioManager.playSe(SE_SPACE_OK);
 
                 const offsetX = -w * 0.05;

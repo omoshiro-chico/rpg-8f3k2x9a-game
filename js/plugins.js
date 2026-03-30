@@ -23,5 +23,6 @@ var $plugins =
 {"name":"CardGacha","status":true,"description":"カードガチャ（単発・10連）＋弾切替（左右キー）＋弾ごと背景画像＋弾解放スイッチ＋石（弾別アイテム）消費制限＋メニュー置換（formation→gacha） v22.2","parameters":{"MenuEnableSwitch":"100","Banners":"5","StartID":"101","PerBannerCount":"20","BackgroundPrefix":"gacha_bg_","UnlockSwitches":"101,102,103,104,105","StoneItemIds":"46,47,48,49,50","SingleCost":"1","TenCost":"10","Rate1":"535","Rate2":"300","Rate3":"50","Rate4":"10","Rate5":"5","SE1":"Cancel1","SE2":"Shot2","SE3":"Shot1","SE4":"Up3","SE5":"Up7","GachaBGM":"Town5","BannerChangeSE":"Cursor2_mv"}},
 {"name":"ChangeMaxUnitBattleParty","status":true,"description":"バトルパーティの最大人数を変更します","parameters":{"maxUnit":"5","isChangeUIScale":"true","isDynamicUIScale":"true","characterNameFontSize":"0"}},
 {"name":"ItemMax","status":true,"description":"全アイテム（アイテム・武器・防具）の所持上限を変更する v1.0","parameters":{"MaxItemCount":"10000"}},
-{"name":"Kaishin","status":true,"description":"会心ダメージ２倍に変更","parameters":{}}
+{"name":"Kaishin","status":true,"description":"会心ダメージ２倍に変更","parameters":{}},
+{"name":"PANDA_ResourcePreLoad","status":true,"description":"画像・音声・アニメーションを事前に読み込み、ラグを軽減します。","parameters":{}}
 ];
