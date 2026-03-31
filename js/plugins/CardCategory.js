@@ -1,7 +1,13 @@
 /*:
  * @target MZ
- * @plugindesc カード図鑑（番号→星→名前→所持数・星は黄色・説明固定表示・画像表示）．防具参照版＋図鑑オープン時にcard101～card200を先読み
+ * @plugindesc カード図鑑（番号→星→名前→所持数・星は黄色・説明固定表示・画像表示）．防具参照版＋取得種類数を変数へ格納
  * @author チェコ
+ *
+ * @param ObtainedCountVariableId
+ * @text 取得種類数を入れる変数ID
+ * @type variable
+ * @default 0
+ * @desc 今まで取得したカード種類数をこの変数へ格納します．0なら格納しません．
  *
  * @help
  * メニューに「カード」コマンドを追加します．
@@ -20,36 +26,21 @@
  * 例）防具ID=101なら card101 を読み込みます．
  *
  * 追加仕様：
- * - カード図鑑を開いた瞬間に card101 ～ card200 をまとめて先読みします．
+ * - 今まで取得したカードの種類数を指定変数に格納します．
+ * - 100種類コンプなら変数に100が入ります．
  */
 
 (() => {
   "use strict";
 
+  const PLUGIN_NAME = "CardBook";
+  const params = PluginManager.parameters(PLUGIN_NAME);
+
   const START_ID = 101;      // カード防具の開始ID
   const CARD_COUNT = 100;    // カード総数（防具数）
+  const OBTAINED_COUNT_VARIABLE_ID = Number(params["ObtainedCountVariableId"] || 0);
 
   const CARD_ARMOR_IDS = Array.from({ length: CARD_COUNT }, (_, i) => START_ID + i);
-
-  // =========================
-  // 追加：カード画像の事前ロード保持
-  // =========================
-
-  let _cardPicturePreloaded = false;
-  let _cardPictureBitmaps = [];
-
-  function preloadAllCardPictures() {
-    if (_cardPicturePreloaded) return;
-
-    _cardPictureBitmaps = [];
-    for (const armorId of CARD_ARMOR_IDS) {
-      const pictureName = "card" + armorId;
-      const bitmap = ImageManager.loadPicture(pictureName);
-      _cardPictureBitmaps.push(bitmap);
-    }
-
-    _cardPicturePreloaded = true;
-  }
 
   // =========================
   // ユーティリティ
@@ -63,6 +54,23 @@
     return $dataArmors ? $dataArmors[armorId] : null;
   }
 
+  function cardPictureNameByArmorId(armorId) {
+    return "card" + armorId;
+  }
+
+  function updateObtainedCardCountVariable() {
+    if (OBTAINED_COUNT_VARIABLE_ID <= 0) return;
+    if (!$gameVariables || !$gameSystem) return;
+
+    let count = 0;
+    for (const armorId of CARD_ARMOR_IDS) {
+      if ($gameSystem.isCardObtained(armorId)) {
+        count++;
+      }
+    }
+    $gameVariables.setValue(OBTAINED_COUNT_VARIABLE_ID, count);
+  }
+
   // レアリティ（星の数）をメモ欄から取得
   function cardRarityStars(armor) {
     if (!armor || !armor.note) return 0;
@@ -72,7 +80,7 @@
   }
 
   // =========================
-  // 追加：入手済みフラグ（所持0でも表示するため）
+  // 入手済みフラグ（所持0でも表示するため）
   // =========================
 
   const _Game_System_initialize = Game_System.prototype.initialize;
@@ -89,10 +97,13 @@
   Game_System.prototype.markCardObtained = function (armorId) {
     this._cardObtainedFlags = this._cardObtainedFlags || {};
     this._cardObtainedFlags[String(armorId)] = true;
+    updateObtainedCardCountVariable();
   };
 
   function bootstrapObtainedFlagsFromCurrentState() {
     if (!$gameSystem || !$gameParty) return;
+
+    let changed = false;
 
     for (const armorId of CARD_ARMOR_IDS) {
       if ($gameSystem.isCardObtained(armorId)) continue;
@@ -105,8 +116,15 @@
       );
 
       if (inInventory || equipped) {
-        $gameSystem.markCardObtained(armorId);
+        $gameSystem._cardObtainedFlags[String(armorId)] = true;
+        changed = true;
       }
+    }
+
+    if (changed) {
+      updateObtainedCardCountVariable();
+    } else {
+      updateObtainedCardCountVariable();
     }
   }
 
@@ -120,7 +138,7 @@
   };
 
   // =========================
-  // 追加：メモ欄 <addSkill:...> を特徴へ変換（装備中だけ有効）
+  // メモ欄 <addSkill:...> を特徴へ変換（装備中だけ有効）
   // =========================
 
   let _cardSkillTagInjected = false;
@@ -205,10 +223,8 @@
       super.create();
       this._fixedDescription = false;
 
-      // 追加：図鑑を開いた瞬間に card101 ～ card200 を先読み
-      preloadAllCardPictures();
-
       bootstrapObtainedFlagsFromCurrentState();
+      updateObtainedCardCountVariable();
 
       this.createHelpWindow();
       this.createCardWindow();
@@ -259,7 +275,7 @@
       const obtained = $gameSystem && $gameSystem.isCardObtained(armor.id);
 
       if (obtained) {
-        this._pictureWindow.setPicture("card" + armor.id);
+        this._pictureWindow.setPicture(cardPictureNameByArmorId(armor.id));
         this._helpWindow.setItem(armor);
         this._fixedDescription = true;
       } else {
@@ -366,21 +382,28 @@
 
     refresh() {
       this.contents.clear();
-      if (this._pictureName) {
-        const bitmap = ImageManager.loadPicture(this._pictureName);
-        bitmap.addLoadListener(() => {
-          this.contents.clear();
-          const scale = Math.min(
-            this.contents.width / bitmap.width,
-            this.contents.height / bitmap.height,
-            1
-          );
-          const dw = bitmap.width * scale;
-          const dh = bitmap.height * scale;
-          const dx = (this.contents.width - dw) / 2;
-          const dy = (this.contents.height - dh) / 2;
-          this.contents.blt(bitmap, 0, 0, bitmap.width, bitmap.height, dx, dy, dw, dh);
-        });
+      if (!this._pictureName) return;
+
+      const bitmap = ImageManager.loadPicture(this._pictureName);
+
+      const drawPicture = () => {
+        this.contents.clear();
+        const scale = Math.min(
+          this.contents.width / bitmap.width,
+          this.contents.height / bitmap.height,
+          1
+        );
+        const dw = bitmap.width * scale;
+        const dh = bitmap.height * scale;
+        const dx = (this.contents.width - dw) / 2;
+        const dy = (this.contents.height - dh) / 2;
+        this.contents.blt(bitmap, 0, 0, bitmap.width, bitmap.height, dx, dy, dw, dh);
+      };
+
+      if (bitmap.isReady()) {
+        drawPicture();
+      } else {
+        bitmap.addLoadListener(drawPicture);
       }
     }
   }

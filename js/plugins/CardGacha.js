@@ -607,23 +607,43 @@
         return;
       }
 
-      if (this._confirmWindow && this._confirmWindow.active && !this.isInResultFlow()) {
-        if (Input.isTriggered("right")) {
-          const next = findNextUnlocked(this._bannerIndex0, +1);
-          if (next !== this._bannerIndex0) {
-            this._bannerIndex0 = next;
-            if (BANNER_CHANGE_SE) AudioManager.playSe(BANNER_CHANGE_SE);
-            this.refreshBannerVisuals();
-          }
-        } else if (Input.isTriggered("left")) {
-          const prev = findNextUnlocked(this._bannerIndex0, -1);
-          if (prev !== this._bannerIndex0) {
-            this._bannerIndex0 = prev;
-            if (BANNER_CHANGE_SE) AudioManager.playSe(BANNER_CHANGE_SE);
-            this.refreshBannerVisuals();
-          }
-        }
+if (this._confirmWindow && this._confirmWindow.active && !this.isInResultFlow()) {
+
+  let dir = 0;
+
+  // --- キーボード ---
+  if (Input.isTriggered("right")) {
+    dir = +1;
+  } else if (Input.isTriggered("left")) {
+    dir = -1;
+  }
+
+  // --- タップ（確認ウィンドウより上のみ有効） ---
+  if (dir === 0 && TouchInput.isTriggered()) {
+    const touchY = TouchInput.y;
+
+    // 確認ウィンドウより上だけ判定
+    if (touchY < this._confirmWindow.y) {
+      const touchX = TouchInput.x;
+
+      if (touchX < Graphics.boxWidth / 2) {
+        dir = -1; // 左半分 → 左へ
+      } else {
+        dir = +1; // 右半分 → 右へ
       }
+    }
+  }
+
+  // --- 実際の切替処理 ---
+  if (dir !== 0) {
+    const next = findNextUnlocked(this._bannerIndex0, dir);
+    if (next !== this._bannerIndex0) {
+      this._bannerIndex0 = next;
+      if (BANNER_CHANGE_SE) AudioManager.playSe(BANNER_CHANGE_SE);
+      this.refreshBannerVisuals();
+    }
+  }
+}
 
       if (this._waitingAnime) {
         if (!$gameScreen.isGachaAnimeActive || !$gameScreen.isGachaAnimeActive()) {
