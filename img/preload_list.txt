@@ -1,0 +1,7 @@
+﻿const PRELOAD_PICTURES = [
+
+];
+
+const PRELOAD_ENEMIES = [
+
+];

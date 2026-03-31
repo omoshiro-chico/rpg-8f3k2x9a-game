@@ -1,6 +1,6 @@
 /*:
  * @target MZ
- * @plugindesc カード図鑑（番号→星→名前→所持数・星は黄色・説明固定表示・画像表示）．防具参照版
+ * @plugindesc カード図鑑（番号→星→名前→所持数・星は黄色・説明固定表示・画像表示）．防具参照版＋図鑑オープン時にcard101～card200を先読み
  * @author チェコ
  *
  * @help
@@ -18,13 +18,38 @@
  *
  * 画像は img/pictures に card101.png のように防具ID対応で置きます．
  * 例）防具ID=101なら card101 を読み込みます．
+ *
+ * 追加仕様：
+ * - カード図鑑を開いた瞬間に card101 ～ card200 をまとめて先読みします．
  */
 
 (() => {
-  const START_ID = 101;     // カード防具の開始ID
+  "use strict";
+
+  const START_ID = 101;      // カード防具の開始ID
   const CARD_COUNT = 100;    // カード総数（防具数）
 
   const CARD_ARMOR_IDS = Array.from({ length: CARD_COUNT }, (_, i) => START_ID + i);
+
+  // =========================
+  // 追加：カード画像の事前ロード保持
+  // =========================
+
+  let _cardPicturePreloaded = false;
+  let _cardPictureBitmaps = [];
+
+  function preloadAllCardPictures() {
+    if (_cardPicturePreloaded) return;
+
+    _cardPictureBitmaps = [];
+    for (const armorId of CARD_ARMOR_IDS) {
+      const pictureName = "card" + armorId;
+      const bitmap = ImageManager.loadPicture(pictureName);
+      _cardPictureBitmaps.push(bitmap);
+    }
+
+    _cardPicturePreloaded = true;
+  }
 
   // =========================
   // ユーティリティ
@@ -43,7 +68,7 @@
     if (!armor || !armor.note) return 0;
     const match = armor.note.match(/<rarity:(\d+)>/i);
     if (!match) return 0;
-    return Math.min(Number(match[1]), 5); // 最大5まで
+    return Math.min(Number(match[1]), 5);
   }
 
   // =========================
@@ -53,7 +78,6 @@
   const _Game_System_initialize = Game_System.prototype.initialize;
   Game_System.prototype.initialize = function () {
     _Game_System_initialize.call(this);
-    // CHANGED: カード入手済み管理（防具IDをキーにする）
     this._cardObtainedFlags = this._cardObtainedFlags || {};
   };
 
@@ -67,9 +91,9 @@
     this._cardObtainedFlags[String(armorId)] = true;
   };
 
-  // CHANGED: 既存セーブ救済用（現在の所持・装備から入手済みを補完）
   function bootstrapObtainedFlagsFromCurrentState() {
     if (!$gameSystem || !$gameParty) return;
+
     for (const armorId of CARD_ARMOR_IDS) {
       if ($gameSystem.isCardObtained(armorId)) continue;
       const armor = safeGetArmor(armorId);
@@ -86,12 +110,10 @@
     }
   }
 
-  // CHANGED: 入手時に入手済みを記録（装備で0になっても表示維持）
   const _Game_Party_gainItem = Game_Party.prototype.gainItem;
   Game_Party.prototype.gainItem = function (item, amount, includeEquip) {
     _Game_Party_gainItem.call(this, item, amount, includeEquip);
 
-    // item が防具かつ対象カードで，増加したときだけ入手済みにする
     if (amount > 0 && DataManager.isArmor(item) && item && isCardArmorId(item.id)) {
       if ($gameSystem) $gameSystem.markCardObtained(item.id);
     }
@@ -105,7 +127,6 @@
 
   function parseAddSkillIds(note) {
     if (!note) return [];
-    // <addSkill:67> / <addSkill:67,68> / 空白混在OK
     const m = note.match(/<addSkill:([^>]+)>/i);
     if (!m) return [];
     return m[1]
@@ -150,7 +171,7 @@
   DataManager.isDatabaseLoaded = function () {
     const loaded = _DataManager_isDatabaseLoaded.call(this);
     if (loaded) {
-      injectAddSkillTagsToTraits(); // CHANGED: DBロード後に一度だけ注入
+      injectAddSkillTagsToTraits();
     }
     return loaded;
   };
@@ -182,9 +203,11 @@
   class Scene_Card extends Scene_MenuBase {
     create() {
       super.create();
-      this._fixedDescription = false; // 決定後に固定するフラグ
+      this._fixedDescription = false;
 
-      // CHANGED: 既存セーブや装備中カードの救済
+      // 追加：図鑑を開いた瞬間に card101 ～ card200 を先読み
+      preloadAllCardPictures();
+
       bootstrapObtainedFlagsFromCurrentState();
 
       this.createHelpWindow();
@@ -233,12 +256,11 @@
       const armor = this._cardWindow.itemAt(this._cardWindow.index());
       if (!armor) return;
 
-      // CHANGED: 所持数ではなく入手済みで判定
       const obtained = $gameSystem && $gameSystem.isCardObtained(armor.id);
 
       if (obtained) {
         this._pictureWindow.setPicture("card" + armor.id);
-        this._helpWindow.setItem(armor); // 説明を固定表示
+        this._helpWindow.setItem(armor);
         this._fixedDescription = true;
       } else {
         this._pictureWindow.setPicture(null);
@@ -271,7 +293,7 @@
 
     itemAt(index) {
       const armorId = CARD_ARMOR_IDS[index];
-      return $dataArmors[armorId]; // 防具参照
+      return $dataArmors[armorId];
     }
 
     drawItem(index) {
@@ -289,19 +311,15 @@
       if (obtained) {
         const stars = "★".repeat(cardRarityStars(armor));
 
-        // 番号
         this.changeTextColor(ColorManager.normalColor());
         this.drawText(number, rect.x, rect.y, 50, "left");
 
-        // 星（黄色）
         this.changeTextColor(ColorManager.textColor(17));
         this.drawText(stars, rect.x + 50, rect.y, 60, "left");
 
-        // 名前（通常色）
         this.resetTextColor();
         this.drawText(armor.name, rect.x + 120, rect.y, nameWidth - 120);
 
-        // 所持数（右寄せ，0も表示）
         this.drawText("x" + have, rect.x + nameWidth, rect.y, qtyWidth, "right");
       } else {
         this.changePaintOpacity(false);
@@ -310,7 +328,6 @@
       }
     }
 
-    // カーソル移動時に説明更新（固定されていない場合のみ）
     updateHelp() {
       if (this._scene.isDescriptionFixed()) return;
       const armor = this.itemAt(this.index());
@@ -319,7 +336,6 @@
         return;
       }
 
-      // CHANGED: 所持数ではなく入手済みで判定
       const obtained = $gameSystem && $gameSystem.isCardObtained(armor.id);
       if (obtained) {
         this._helpWindow.setItem(armor);

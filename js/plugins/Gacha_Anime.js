@@ -1,6 +1,6 @@
 /*:
  * @target MZ
- * @plugindesc ガチャ演出用．イントロ背景フェードイン→本番背景フェード重ね＋中央ズーム＋周囲4体スライドイン＋ラスト5人ズーム＋オーバーレイ＋背景二段フェード＋最後キャラ切替＆Enter後の左下スライド＋ドアップ振動ズーム＋最後の追加4枚演出＋集中線演出＋ラスト2枚ズーム＆1枚回転フェード v24.3
+ * @plugindesc ガチャ演出用．イントロ背景フェードイン→本番背景フェード重ね＋中央ズーム＋周囲4体スライドイン＋ラスト5人ズーム＋オーバーレイ＋背景二段フェード＋最後キャラ切替＆Enter後の左下スライド＋ドアップ振動ズーム＋最後の追加4枚演出＋集中線演出＋ラスト2枚ズーム＆1枚回転フェード v24.6 preload修正版
  * @author You
  *
  * @command StartSceneSimple
@@ -489,6 +489,8 @@
  */
 
 (() => {
+    "use strict";
+
     const PLUGIN_NAME = "Gacha_Anime";
 
     const params = PluginManager.parameters(PLUGIN_NAME);
@@ -543,6 +545,8 @@
     const LAST_ROTATE_ID        = 19;
     const TOP_EFFECT_PIC_ID     = 20;
 
+    const PRELOAD_WAIT_PHASE = -100;
+
     const FINAL_ZOOM_WAIT_FRAMES = 60;
     const FINAL_ZOOM_DURATION    = 50;
     const FINAL_ZOOM_SCALE       = 220;
@@ -563,9 +567,9 @@
     const EFFECT_PIC_BASE_SCALE = 140;
     const EFFECT_ROTATE_SPEED   = 5;
 
-    const SHAKE_BG_NAME  = "集中線1";
-    const BLINK_BG_NAME  = "集中線2";
-    const FINAL_BG_NAME  = "白";
+    const SHAKE_BG_NAME   = "集中線1";
+    const BLINK_BG_NAME   = "集中線2";
+    const FINAL_BG_NAME   = "白";
     const MOVING_PIC_NAME = "のびはめ波";
 
     const MOVING_START_X_RATE = -0.50;
@@ -625,75 +629,115 @@
     const LAST_ROTATE_FADEOUT_DURATION = 60;
     const LAST_ROTATE_SPEED            = 0.05;
 
+    function uniqueValidNames(names) {
+        return [...new Set((names || []).filter(name => typeof name === "string" && name.length > 0))];
+    }
+
+    function loadPreloadPictureBitmap(name) {
+        return ImageManager.loadBitmap("img/pictures/", name);
+    }
+
+    function loadPictureBitmaps(names) {
+        return uniqueValidNames(names).map(name => loadPreloadPictureBitmap(name));
+    }
+
+    function areBitmapsReady(bitmaps) {
+        if (!bitmaps || bitmaps.length === 0) return true;
+        return bitmaps.every(bitmap => bitmap && bitmap.isReady());
+    }
+
+    function buildSimplePreloadPictureList(bgName, centerName, leftName, rightName, bottomLeftName, bottomRightName) {
+        return uniqueValidNames([
+            bgName,
+            centerName,
+            leftName,
+            rightName,
+            bottomLeftName,
+            bottomRightName
+        ]);
+    }
+
+    function buildGachaPreloadPictureList(args) {
+        const effectiveType = Number(args.effectiveGachaType || 1);
+        const mainBg = (effectiveType === 4 && args.useAltSet && args.altBgName) ? args.altBgName : args.bgName;
+        const extraBg = (effectiveType === 4 && args.useAltSet && args.altExtraBgName) ? args.altExtraBgName : args.extraBgName;
+        const meteorName = (effectiveType === 4 && args.altMeteorName) ? args.altMeteorName : SECOND_MOVING_PIC_NAME_DEFAULT;
+
+        return uniqueValidNames([
+            args.introBgName,
+            mainBg,
+            args.centerFirstName,
+            args.centerSecondName,
+            args.leftName,
+            args.rightName,
+            args.bottomLeftName,
+            args.bottomRightName,
+            args.overlay1Name,
+            args.overlay2Name,
+            args.overlay3Name,
+            args.nextBgName,
+            extraBg,
+            args.finalChar1Name,
+            args.finalChar2Name,
+            args.finalChar3Name,
+            args.extraTopName,
+            args.extraBottomUpperName,
+            args.extraBottomLowerName,
+            args.extraFadeName,
+            args.pairImage1Name,
+            args.pairImage2Name,
+            args.lastRotateName,
+            args.lastRotate2Name,
+            args.lastRotate3Name,
+            args.lastRotate4Name,
+            args.lastRotate5Name,
+            args.soloRightName,
+            args.soloLeftName,
+            args.topEffectName,
+            args.altBgName,
+            args.altExtraBgName,
+            args.altMeteorName,
+            EFFECT_PIC_NAME,
+            SHAKE_BG_NAME,
+            BLINK_BG_NAME,
+            FINAL_BG_NAME,
+            MOVING_PIC_NAME,
+            meteorName
+        ]);
+    }
+
     function showSceneSimple(bgName, centerName, leftName, rightName, bottomLeftName, bottomRightName) {
+        const preloadNames = buildSimplePreloadPictureList(
+            bgName,
+            centerName,
+            leftName,
+            rightName,
+            bottomLeftName,
+            bottomRightName
+        );
+        loadPictureBitmaps(preloadNames);
+
         const screen = $gameScreen;
         const w = Graphics.width;
         const h = Graphics.height;
 
         if (bgName) {
-            screen.showPicture(
-                BG_ID, bgName,
-                0,
-                0, 0,
-                100, 100,
-                255,
-                0
-            );
+            screen.showPicture(BG_ID, bgName, 0, 0, 0, 100, 100, 255, 0);
         }
-
         if (centerName) {
-            screen.showPicture(
-                CENTER_ID, centerName,
-                1,
-                w / 2, h / 2,
-                50, 50,
-                255,
-                0
-            );
+            screen.showPicture(CENTER_ID, centerName, 1, w / 2, h / 2, 50, 50, 255, 0);
         }
-
         if (leftName) {
-            screen.showPicture(
-                LEFT_ID, leftName,
-                1,
-                w * 0.15, h * 0.3,
-                50, 50,
-                255,
-                0
-            );
+            screen.showPicture(LEFT_ID, leftName, 1, w * 0.15, h * 0.3, 50, 50, 255, 0);
         }
-
         if (rightName) {
-            screen.showPicture(
-                RIGHT_ID, rightName,
-                1,
-                w * 0.85, h * 0.3,
-                40, 40,
-                255,
-                0
-            );
+            screen.showPicture(RIGHT_ID, rightName, 1, w * 0.85, h * 0.3, 40, 40, 255, 0);
         }
-
         if (bottomLeftName) {
-            screen.showPicture(
-                BOTTOM_LEFT_ID, bottomLeftName,
-                1,
-                w * 0.15, h * 0.75,
-                40, 40,
-                255,
-                0
-            );
+            screen.showPicture(BOTTOM_LEFT_ID, bottomLeftName, 1, w * 0.15, h * 0.75, 40, 40, 255, 0);
         }
-
         if (bottomRightName) {
-            screen.showPicture(
-                BOTTOM_RIGHT_ID, bottomRightName,
-                1,
-                w * 0.85, h * 0.75,
-                40, 40,
-                255,
-                0
-            );
+            screen.showPicture(BOTTOM_RIGHT_ID, bottomRightName, 1, w * 0.85, h * 0.75, 40, 40, 255, 0);
         }
     }
 
@@ -710,7 +754,14 @@
         }
     };
 
-    // 単体キャラ用：どのスロットかも記録する
+    const _Game_Interpreter_updateWaitMode = Game_Interpreter.prototype.updateWaitMode;
+    Game_Interpreter.prototype.updateWaitMode = function() {
+        if (this._waitMode === "gachaAnime") {
+            return $gameScreen.isGachaAnimeActive();
+        }
+        return _Game_Interpreter_updateWaitMode.call(this);
+    };
+
     function setupSingleChar(state) {
         const slots = [];
         if (state.leftName)        slots.push("left");
@@ -778,7 +829,7 @@
         const baseSinglePattern = (forceSingle = false) => {
             if (forceSingle) {
                 setupSingleChar(state);
-                return 10; // 単体スライド専用パターン
+                return 10;
             }
             const pt = Math.random() < 0.5 ? 0 : 10;
             if (pt === 10) setupSingleChar(state);
@@ -787,7 +838,6 @@
 
         const gt = state.gachaType || 1;
 
-        // 設定1：4人のうち誰か一人だけ登場
         if (gt === 1) {
             state.patternType = baseSinglePattern(true);
             return;
@@ -852,6 +902,137 @@
         state.patternType = patterns[Math.floor(Math.random() * patterns.length)];
     }
 
+    function initializeGachaAnimeState(screen, setup) {
+        const state = screen._gachaAnimeState;
+        const w = Graphics.width;
+        const h = Graphics.height;
+
+        const introBg = setup.introBgName || "";
+        state.introBgName = introBg;
+
+        state.mainBgName  = setup.bgName || "";
+        state.nextBgName  = setup.nextBgName || "";
+        state.extraBgName = setup.extraBgName || "";
+
+        state.requestGachaType = setup.requestGachaType;
+        state.gachaType        = setup.effectiveGachaType;
+
+        state.secondMovingPicName = SECOND_MOVING_PIC_NAME_DEFAULT;
+        if (state.gachaType === 4 && setup.useAltSet) {
+            if (setup.altBgName)      state.mainBgName = setup.altBgName;
+            if (setup.altExtraBgName) state.extraBgName = setup.altExtraBgName;
+            if (setup.altMeteorName)  state.secondMovingPicName = setup.altMeteorName;
+        } else if (setup.altMeteorName && state.gachaType === 4) {
+            state.secondMovingPicName = setup.altMeteorName;
+        }
+
+        const introName = setup.centerFirstName || setup.centerSecondName || "";
+        const finalName = setup.centerSecondName || setup.centerFirstName || "";
+
+        state.active             = true;
+        state.awaitFinalInput    = false;
+        state.preloading         = false;
+        state.preloadBitmaps     = [];
+        state.preloadStarted     = false;
+
+        state.baseCenterX        = w / 2;
+        state.baseCenterY        = h / 2;
+
+        if (introBg) {
+            state.phase = -2;
+        } else if (state.mainBgName) {
+            screen.showPicture(BG_ID, state.mainBgName, 0, 0, 0, 100, 100, 255, 0);
+            state.phase = 0;
+        } else {
+            state.phase = 0;
+        }
+
+        state.frame              = 0;
+        state.crossFrame         = 0;
+        state.fadeDuration       = setup.fadeDuration;
+        state.centerZoomDuration = setup.centerZoomDuration;
+        state.waitAfterZoom      = setup.waitAfterZoom;
+        state.slideDuration      = setup.slideDuration;
+        state.waitBetweenCard    = setup.waitBetweenCards;
+
+        state.centerIntroName    = introName;
+        state.centerFinalName    = finalName;
+        state.leftName           = setup.leftName || "";
+        state.rightName          = setup.rightName || "";
+        state.bottomLeftName     = setup.bottomLeftName || "";
+        state.bottomRightName    = setup.bottomRightName || "";
+        state.finalZoomFrame     = 0;
+
+        state.overlayNames = [
+            setup.overlay1Name || "",
+            setup.overlay2Name || "",
+            setup.overlay3Name || ""
+        ];
+        state.overlayDuration = setup.overlayDuration;
+        state.overlayIndex    = 0;
+        state.overlayFrame    = 0;
+
+        state.finalWaitDuration = setup.finalWait;
+        state.charChangeWait    = setup.charChangeWait;
+        state.finalChar1Name    = setup.finalChar1Name || "";
+        state.finalChar2Name    = setup.finalChar2Name || "";
+        state.finalChar3Name    = setup.finalChar3Name || "";
+
+        state.extraTopName        = setup.extraTopName || "";
+        state.extraBottomUpName   = setup.extraBottomUpperName || "";
+        state.extraBottomDownName = setup.extraBottomLowerName || "";
+        state.extraFadeName       = setup.extraFadeName || "";
+
+        state.pairImage1Name = setup.pairImage1Name || "";
+        state.pairImage2Name = setup.pairImage2Name || "";
+
+        state.lastRotateName         = setup.lastRotateName || "";
+        state.lastRotate2Name        = setup.lastRotate2Name || "";
+        state.lastRotate3Name        = setup.lastRotate3Name || "";
+        state.lastRotate4Name        = setup.lastRotate4Name || "";
+        state.lastRotate5Name        = setup.lastRotate5Name || "";
+        state.lastRotateSelectedName = "";
+
+        state.soloRightName = setup.soloRightName || "";
+        state.soloLeftName  = setup.soloLeftName || "";
+        state.topEffectName = setup.topEffectName || "";
+
+        state.enterBaseX       = state.baseCenterX;
+        state.enterBaseY       = state.baseCenterY;
+        state.enterZoomStarted = false;
+        state.zoomStartX       = state.baseCenterX;
+        state.zoomStartY       = state.baseCenterY;
+        state.zoomEndX         = state.baseCenterX;
+        state.zoomEndY         = state.baseCenterY;
+
+        state.movingPhase        = 0;
+        state.movingFrame        = 0;
+        state.movingDone         = false;
+        state.secondMovingActive = false;
+        state.secondMovingFrame  = 0;
+        state.secondMovingDone   = false;
+
+        state.singleCharName = "";
+        state.singleCharSlot = null;
+
+        choosePatternType(state);
+
+        state.enablePair = false;
+        if (state.gachaType === 1) {
+            state.enablePair = false;
+        } else if (state.gachaType === 2 || state.gachaType === 3) {
+            state.enablePair = Math.random() < 0.7;
+        } else if (state.gachaType === 4) {
+            state.enablePair = true;
+        }
+
+        state.bgmPlaying = false;
+        if (GACHA_BGM.name) {
+            AudioManager.playBgm(GACHA_BGM);
+            state.bgmPlaying = true;
+        }
+    }
+
     Game_Screen.prototype.startGachaAnime = function(
         introBgName,
         bgName,
@@ -908,9 +1089,6 @@
         const finalW    = Math.max(0, finalWait || 30);
         const charW     = Math.max(1, charChangeWait || 20);
 
-        const w = Graphics.width;
-        const h = Graphics.height;
-
         this.erasePicture(BG_ID);
         this.erasePicture(CENTER_ID);
         this.erasePicture(LEFT_ID);
@@ -932,137 +1110,73 @@
         this.erasePicture(LAST_ROTATE_ID);
         this.erasePicture(TOP_EFFECT_PIC_ID);
 
-        const introBg = introBgName || "";
-        state.introBgName = introBg;
+        stopGachaBgm(state);
 
-        state.mainBgName   = bgName || "";
-        state.nextBgName   = nextBgName || "";
-        state.extraBgName  = extraBgName || "";
+        const requestType = Number(gachaType || 1);
+        const effectiveGachaType = calcEffectiveGachaType(requestType);
+        const useAltSet = effectiveGachaType === 4 && Math.random() < 0.7;
 
-        state.requestGachaType = Number(gachaType || 1);
-        state.gachaType        = calcEffectiveGachaType(state.requestGachaType);
+        const setup = {
+            requestGachaType: requestType,
+            effectiveGachaType,
+            useAltSet,
 
-        state.secondMovingPicName = SECOND_MOVING_PIC_NAME_DEFAULT;
-        if (state.gachaType === 4 && Math.random() < 0.7) {
-            if (altBgName)       state.mainBgName  = altBgName;
-            if (altExtraBgName)  state.extraBgName = altExtraBgName;
-            if (altMeteorName)   state.secondMovingPicName = altMeteorName;
-        } else {
-            if (altMeteorName && state.gachaType === 4) {
-                state.secondMovingPicName = altMeteorName;
-            }
-        }
+            introBgName: String(introBgName || ""),
+            bgName: String(bgName || ""),
+            centerFirstName: String(centerFirstName || ""),
+            centerSecondName: String(centerSecondName || ""),
+            leftName: String(leftName || ""),
+            rightName: String(rightName || ""),
+            bottomLeftName: String(bottomLeftName || ""),
+            bottomRightName: String(bottomRightName || ""),
+            overlay1Name: String(overlay1Name || ""),
+            overlay2Name: String(overlay2Name || ""),
+            overlay3Name: String(overlay3Name || ""),
+            nextBgName: String(nextBgName || ""),
+            extraBgName: String(extraBgName || ""),
+            finalChar1Name: String(finalChar1Name || ""),
+            finalChar2Name: String(finalChar2Name || ""),
+            finalChar3Name: String(finalChar3Name || ""),
+            extraTopName: String(extraTopName || ""),
+            extraBottomUpperName: String(extraBottomUpperName || ""),
+            extraBottomLowerName: String(extraBottomLowerName || ""),
+            extraFadeName: String(extraFadeName || ""),
+            pairImage1Name: String(pairImage1Name || ""),
+            pairImage2Name: String(pairImage2Name || ""),
+            lastRotateName: String(lastRotateName || ""),
+            lastRotate2Name: String(lastRotate2Name || ""),
+            lastRotate3Name: String(lastRotate3Name || ""),
+            lastRotate4Name: String(lastRotate4Name || ""),
+            lastRotate5Name: String(lastRotate5Name || ""),
+            soloRightName: String(soloRightName || ""),
+            soloLeftName: String(soloLeftName || ""),
+            topEffectName: String(topEffectName || ""),
+            altBgName: String(altBgName || ""),
+            altExtraBgName: String(altExtraBgName || ""),
+            altMeteorName: String(altMeteorName || ""),
 
-        const introName = centerFirstName || centerSecondName || "";
-        const finalName = centerSecondName || centerFirstName || "";
+            slideDuration: slideD,
+            centerZoomDuration: zoomD,
+            waitAfterZoom: waitZoom,
+            waitBetweenCards: betweenW,
+            overlayDuration: overlayD,
+            fadeDuration: fadeD,
+            finalWait: finalW,
+            charChangeWait: charW
+        };
 
-        state.active             = true;
-        state.awaitFinalInput    = false;
+        const preloadList = buildGachaPreloadPictureList(setup);
 
-        state.baseCenterX        = w / 2;
-        state.baseCenterY        = h / 2;
-
-        if (introBg) {
-            state.phase = -2;
-        } else if (state.mainBgName) {
-            this.showPicture(
-                BG_ID, state.mainBgName,
-                0,
-                0, 0,
-                100, 100,
-                255,
-                0
-            );
-            state.phase = 0;
-        } else {
-            state.phase = 0;
-        }
-
-        state.frame              = 0;
-        state.crossFrame         = 0;
-        state.fadeDuration       = fadeD;
-        state.centerZoomDuration = zoomD;
-        state.waitAfterZoom      = waitZoom;
-        state.slideDuration      = slideD;
-        state.waitBetweenCard    = betweenW;
-
-        state.centerIntroName    = introName;
-        state.centerFinalName    = finalName;
-        state.leftName           = leftName || "";
-        state.rightName          = rightName || "";
-        state.bottomLeftName     = bottomLeftName || "";
-        state.bottomRightName    = bottomRightName || "";
-        state.finalZoomFrame     = 0;
-
-        state.overlayNames   = [
-            overlay1Name || "",
-            overlay2Name || "",
-            overlay3Name || ""
-        ];
-        state.overlayDuration = overlayD;
-        state.overlayIndex    = 0;
-        state.overlayFrame    = 0;
-
-        state.finalWaitDuration = finalW;
-        state.charChangeWait    = charW;
-        state.finalChar1Name    = finalChar1Name || "";
-        state.finalChar2Name    = finalChar2Name || "";
-        state.finalChar3Name    = finalChar3Name || "";
-
-        state.extraTopName         = extraTopName || "";
-        state.extraBottomUpName    = extraBottomUpperName || "";
-        state.extraBottomDownName  = extraBottomLowerName || "";
-        state.extraFadeName        = extraFadeName || "";
-
-        state.pairImage1Name       = pairImage1Name || "";
-        state.pairImage2Name       = pairImage2Name || "";
-
-        state.lastRotateName       = lastRotateName || "";
-        state.lastRotate2Name      = lastRotate2Name || "";
-        state.lastRotate3Name      = lastRotate3Name || "";
-        state.lastRotate4Name      = lastRotate4Name || "";
-        state.lastRotate5Name      = lastRotate5Name || "";
-        state.lastRotateSelectedName = "";
-
-        state.soloRightName        = soloRightName || "";
-        state.soloLeftName         = soloLeftName || "";
-        state.topEffectName        = topEffectName || "";
-
-        state.enterBaseX         = state.baseCenterX;
-        state.enterBaseY         = state.baseCenterY;
-        state.enterZoomStarted   = false;
-        state.zoomStartX         = state.baseCenterX;
-        state.zoomStartY         = state.baseCenterY;
-        state.zoomEndX           = state.baseCenterX;
-        state.zoomEndY           = state.baseCenterY;
-
-        state.movingPhase         = 0;
-        state.movingFrame         = 0;
-        state.movingDone          = false;
-
-        state.secondMovingActive  = false;
-        state.secondMovingFrame   = 0;
-        state.secondMovingDone    = false;
-
-        state.singleCharName      = "";
-        state.singleCharSlot      = null;
-
-        choosePatternType(state);
-
-        state.enablePair = false;
-        if (state.gachaType === 1) {
-            state.enablePair = false;
-        } else if (state.gachaType === 2 || state.gachaType === 3) {
-            state.enablePair = Math.random() < 0.7;
-        } else if (state.gachaType === 4) {
-            state.enablePair = true;
-        }
-
+        state.active = true;
+        state.awaitFinalInput = false;
+        state.preloading = true;
+        state.preloadStarted = true;
+        state.preloadBitmaps = loadPictureBitmaps(preloadList);
+        state.pendingSetup = setup;
+        state.phase = PRELOAD_WAIT_PHASE;
+        state.frame = 0;
+        state.crossFrame = 0;
         state.bgmPlaying = false;
-        if (GACHA_BGM.name) {
-            AudioManager.playBgm(GACHA_BGM);
-            state.bgmPlaying = true;
-        }
     };
 
     function updateMovingPic(screen, state, w, h) {
@@ -1080,21 +1194,11 @@
         if (state.movingPhase === 0) {
             state.movingPhase = 1;
             state.movingFrame = 0;
-            screen.showPicture(
-                MOVING_PIC_ID,
-                MOVING_PIC_NAME,
-                1,
-                startX, startY,
-                100, 100,
-                255,
-                0
-            );
+            screen.showPicture(MOVING_PIC_ID, MOVING_PIC_NAME, 1, startX, startY, 100, 100, 255, 0);
             if (SE_NOBIHAME) AudioManager.playSe(SE_NOBIHAME);
         }
 
-        if (state.movingDone) {
-            return;
-        }
+        if (state.movingDone) return;
 
         let fromX, fromY, toX, toY, dur;
 
@@ -1129,41 +1233,22 @@
                 break;
             default:
                 state.movingDone = true;
-                screen.showPicture(
-                    MOVING_PIC_ID,
-                    MOVING_PIC_NAME,
-                    1,
-                    centerX, centerY,
-                    100, 100,
-                    255,
-                    0
-                );
+                screen.showPicture(MOVING_PIC_ID, MOVING_PIC_NAME, 1, centerX, centerY, 100, 100, 255, 0);
                 return;
         }
 
         const t     = state.movingFrame;
         const ratio = dur > 0 ? Math.min(1.0, t / dur) : 1.0;
 
-        let baseX = fromX + (toX - fromX) * ratio;
-        let baseY = fromY + (toY - fromY) * ratio;
+        const baseX = fromX + (toX - fromX) * ratio;
+        const baseY = fromY + (toY - fromY) * ratio;
 
         const maxAmp = 8;
         const amp    = maxAmp * (1.0 - ratio);
         const dx     = (Math.random() * 2 - 1) * amp;
         const dy     = (Math.random() * 2 - 1) * amp;
 
-        const x = baseX + dx;
-        const y = baseY + dy;
-
-        screen.movePicture(
-            MOVING_PIC_ID,
-            1,
-            x, y,
-            100, 100,
-            255,
-            0,
-            1
-        );
+        screen.movePicture(MOVING_PIC_ID, 1, baseX + dx, baseY + dy, 100, 100, 255, 0, 1);
 
         if (state.movingPhase === 4 && meteorName) {
             const sStartX  = w * SECOND_START_X_RATE;
@@ -1174,15 +1259,7 @@
             if (!state.secondMovingActive) {
                 state.secondMovingActive = true;
                 state.secondMovingFrame  = 0;
-                screen.showPicture(
-                    SECOND_MOVING_PIC_ID,
-                    meteorName,
-                    1,
-                    sStartX, sStartY,
-                    100, 100,
-                    255,
-                    0
-                );
+                screen.showPicture(SECOND_MOVING_PIC_ID, meteorName, 1, sStartX, sStartY, 100, 100, 255, 0);
             }
 
             if (!state.secondMovingDone) {
@@ -1190,37 +1267,20 @@
                 const sDur = SECOND_MOVE_FRAMES;
                 const sRat = sDur > 0 ? Math.min(1.0, st / sDur) : 1.0;
 
-                let sBaseX = sStartX + (sCenterX - sStartX) * sRat;
-                let sBaseY = sStartY + (sCenterY - sStartY) * sRat;
+                const sBaseX = sStartX + (sCenterX - sStartX) * sRat;
+                const sBaseY = sStartY + (sCenterY - sStartY) * sRat;
 
                 const sAmp = 6 * (1.0 - sRat);
                 const sdx  = (Math.random() * 2 - 1) * sAmp;
                 const sdy  = (Math.random() * 2 - 1) * sAmp;
 
-                screen.movePicture(
-                    SECOND_MOVING_PIC_ID,
-                    1,
-                    sBaseX + sdx,
-                    sBaseY + sdy,
-                    100, 100,
-                    255,
-                    0,
-                    1
-                );
+                screen.movePicture(SECOND_MOVING_PIC_ID, 1, sBaseX + sdx, sBaseY + sdy, 100, 100, 255, 0, 1);
 
                 state.secondMovingFrame++;
 
                 if (state.secondMovingFrame > sDur) {
                     state.secondMovingDone = true;
-                    screen.showPicture(
-                        SECOND_MOVING_PIC_ID,
-                        meteorName,
-                        1,
-                        sCenterX, sCenterY,
-                        100, 100,
-                        255,
-                        0
-                    );
+                    screen.showPicture(SECOND_MOVING_PIC_ID, meteorName, 1, sCenterX, sCenterY, 100, 100, 255, 0);
                 }
             }
         }
@@ -1232,15 +1292,7 @@
             state.movingFrame = 0;
             if (state.movingPhase > 4) {
                 state.movingDone = true;
-                screen.showPicture(
-                    MOVING_PIC_ID,
-                    MOVING_PIC_NAME,
-                    1,
-                    centerX, centerY,
-                    100, 100,
-                    255,
-                    0
-                );
+                screen.showPicture(MOVING_PIC_ID, MOVING_PIC_NAME, 1, centerX, centerY, 100, 100, 255, 0);
             }
         }
     }
@@ -1249,6 +1301,15 @@
         this.initGachaAnimeState();
         const state = this._gachaAnimeState;
         if (!state.active) return;
+
+        if (state.phase === PRELOAD_WAIT_PHASE) {
+            if (!areBitmapsReady(state.preloadBitmaps)) {
+                return;
+            }
+            initializeGachaAnimeState(this, state.pendingSetup);
+            state.pendingSetup = null;
+            return;
+        }
 
         const screen = this;
         const w = Graphics.width;
@@ -1275,36 +1336,14 @@
             }
 
             if (state.crossFrame === 0) {
-                screen.showPicture(
-                    BG_ID, introBg,
-                    0,
-                    0, 0,
-                    100, 100,
-                    0,
-                    0
-                );
-                screen.movePicture(
-                    BG_ID,
-                    0,
-                    0, 0,
-                    100, 100,
-                    255,
-                    0,
-                    state.fadeDuration
-                );
+                screen.showPicture(BG_ID, introBg, 0, 0, 0, 100, 100, 0, 0);
+                screen.movePicture(BG_ID, 0, 0, 0, 100, 100, 255, 0, state.fadeDuration);
             }
 
             state.crossFrame++;
 
             if (state.crossFrame >= state.fadeDuration) {
-                screen.showPicture(
-                    BG_ID, introBg,
-                    0,
-                    0, 0,
-                    100, 100,
-                    255,
-                    0
-                );
+                screen.showPicture(BG_ID, introBg, 0, 0, 0, 100, 100, 255, 0);
                 state.phase      = state.mainBgName ? -1 : 0;
                 state.frame      = 0;
                 state.crossFrame = 0;
@@ -1318,36 +1357,14 @@
             }
 
             if (state.crossFrame === 0) {
-                screen.showPicture(
-                    OVERLAY_ID, mainBg,
-                    0,
-                    0, 0,
-                    100, 100,
-                    0,
-                    0
-                );
-                screen.movePicture(
-                    OVERLAY_ID,
-                    0,
-                    0, 0,
-                    100, 100,
-                    255,
-                    0,
-                    state.fadeDuration
-                );
+                screen.showPicture(OVERLAY_ID, mainBg, 0, 0, 0, 100, 100, 0, 0);
+                screen.movePicture(OVERLAY_ID, 0, 0, 0, 100, 100, 255, 0, state.fadeDuration);
             }
 
             state.crossFrame++;
 
             if (state.crossFrame >= state.fadeDuration) {
-                screen.showPicture(
-                    BG_ID, mainBg,
-                    0,
-                    0, 0,
-                    100, 100,
-                    255,
-                    0
-                );
+                screen.showPicture(BG_ID, mainBg, 0, 0, 0, 100, 100, 255, 0);
                 screen.erasePicture(OVERLAY_ID);
 
                 state.phase      = 0;
@@ -1356,37 +1373,14 @@
             }
         } else if (state.phase === 0) {
             if (state.frame === 1 && state.centerIntroName) {
-                screen.showPicture(
-                    CENTER_ID, state.centerIntroName,
-                    1,
-                    w / 2, h / 2,
-                    120, 120,
-                    255,
-                    0
-                );
-                screen.movePicture(
-                    CENTER_ID,
-                    1,
-                    w / 2, h / 2,
-                    50, 50,
-                    255,
-                    0,
-                    state.centerZoomDuration
-                );
+                screen.showPicture(CENTER_ID, state.centerIntroName, 1, w / 2, h / 2, 120, 120, 255, 0);
+                screen.movePicture(CENTER_ID, 1, w / 2, h / 2, 50, 50, 255, 0, state.centerZoomDuration);
                 if (SE_HIDE_GLIDE) AudioManager.playSe(SE_HIDE_GLIDE);
             }
 
             if (state.frame === state.centerZoomDuration) {
-                if (state.centerFinalName &&
-                    state.centerFinalName !== state.centerIntroName) {
-                    screen.showPicture(
-                        CENTER_ID, state.centerFinalName,
-                        1,
-                        w / 2, h / 2,
-                        50, 50,
-                        255,
-                        0
-                    );
+                if (state.centerFinalName && state.centerFinalName !== state.centerIntroName) {
+                    screen.showPicture(CENTER_ID, state.centerFinalName, 1, w / 2, h / 2, 50, 50, 255, 0);
                     if (SE_HIDE_FLY) AudioManager.playSe(SE_HIDE_FLY);
                 }
             }
@@ -1396,7 +1390,6 @@
                 state.frame = 0;
             }
         } else if (state.phase === 1) {
-            // 単体パターン（設定1用を含む）
             if (state.patternType === 10) {
                 if (state.frame === 1 && state.singleCharName) {
                     AudioManager.playSe({ name: "Wind7", volume: 90, pitch: 100, pan: 0 });
@@ -1434,23 +1427,8 @@
                             break;
                     }
 
-                    screen.showPicture(
-                        picId, state.singleCharName,
-                        1,
-                        startX, targetY,
-                        50, 50,
-                        255,
-                        0
-                    );
-                    screen.movePicture(
-                        picId,
-                        1,
-                        targetX, targetY,
-                        50, 50,
-                        255,
-                        0,
-                        state.slideDuration
-                    );
+                    screen.showPicture(picId, state.singleCharName, 1, startX, targetY, 50, 50, 255, 0);
+                    screen.movePicture(picId, 1, targetX, targetY, 50, 50, 255, 0, state.slideDuration);
                 }
 
                 if (state.frame >= state.slideDuration + state.waitBetweenCard) {
@@ -1500,23 +1478,8 @@
 
                 if (name) {
                     AudioManager.playSe({ name: "Wind7", volume: 90, pitch: 100, pan: 0 });
-                    screen.showPicture(
-                        LEFT_ID, name,
-                        1,
-                        startX, targetY,
-                        50, 50,
-                        255,
-                        0
-                    );
-                    screen.movePicture(
-                        LEFT_ID,
-                        1,
-                        targetX, targetY,
-                        50, 50,
-                        255,
-                        0,
-                        state.slideDuration
-                    );
+                    screen.showPicture(LEFT_ID, name, 1, startX, targetY, 50, 50, 255, 0);
+                    screen.movePicture(LEFT_ID, 1, targetX, targetY, 50, 50, 255, 0, state.slideDuration);
                 }
             }
 
@@ -1567,23 +1530,8 @@
 
                 if (name) {
                     AudioManager.playSe({ name: "Wind7", volume: 90, pitch: 100, pan: 0 });
-                    screen.showPicture(
-                        RIGHT_ID, name,
-                        1,
-                        startX, targetY,
-                        50, 50,
-                        255,
-                        0
-                    );
-                    screen.movePicture(
-                        RIGHT_ID,
-                        1,
-                        targetX, targetY,
-                        50, 50,
-                        255,
-                        0,
-                        state.slideDuration
-                    );
+                    screen.showPicture(RIGHT_ID, name, 1, startX, targetY, 50, 50, 255, 0);
+                    screen.movePicture(RIGHT_ID, 1, targetX, targetY, 50, 50, 255, 0, state.slideDuration);
                 }
             }
 
@@ -1605,23 +1553,8 @@
                 const startX  = -w * 0.3;
                 const targetX = w * 0.15;
                 const targetY = h * 0.75;
-                screen.showPicture(
-                    BOTTOM_LEFT_ID, state.bottomLeftName,
-                    1,
-                    startX, targetY,
-                    50, 50,
-                    255,
-                    0
-                );
-                screen.movePicture(
-                    BOTTOM_LEFT_ID,
-                    1,
-                    targetX, targetY,
-                    50, 50,
-                    255,
-                    0,
-                    state.slideDuration
-                );
+                screen.showPicture(BOTTOM_LEFT_ID, state.bottomLeftName, 1, startX, targetY, 50, 50, 255, 0);
+                screen.movePicture(BOTTOM_LEFT_ID, 1, targetX, targetY, 50, 50, 255, 0, state.slideDuration);
             }
             if (state.frame >= state.slideDuration + state.waitBetweenCard) {
                 state.phase = 4;
@@ -1640,23 +1573,8 @@
                 const startX  = w * 1.3;
                 const targetX = w * 0.85;
                 const targetY = h * 0.75;
-                screen.showPicture(
-                    BOTTOM_RIGHT_ID, state.bottomRightName,
-                    1,
-                    startX, targetY,
-                    50, 50,
-                    255,
-                    0
-                );
-                screen.movePicture(
-                    BOTTOM_RIGHT_ID,
-                    1,
-                    targetX, targetY,
-                    50, 50,
-                    255,
-                    0,
-                    state.slideDuration
-                );
+                screen.showPicture(BOTTOM_RIGHT_ID, state.bottomRightName, 1, startX, targetY, 50, 50, 255, 0);
+                screen.movePicture(BOTTOM_RIGHT_ID, 1, targetX, targetY, 50, 50, 255, 0, state.slideDuration);
             }
             if (state.frame >= state.slideDuration) {
                 state.phase          = 5;
@@ -1670,59 +1588,19 @@
                 const offsetX = w * FINAL_ZOOM_OFFSET_RATE_X;
 
                 if (screen.picture(CENTER_ID)) {
-                    screen.movePicture(
-                        CENTER_ID,
-                        1,
-                        w / 2, h / 2 + offsetY,
-                        FINAL_ZOOM_SCALE, FINAL_ZOOM_SCALE,
-                        255,
-                        0,
-                        FINAL_ZOOM_DURATION
-                    );
+                    screen.movePicture(CENTER_ID, 1, w / 2, h / 2 + offsetY, FINAL_ZOOM_SCALE, FINAL_ZOOM_SCALE, 255, 0, FINAL_ZOOM_DURATION);
                 }
                 if (screen.picture(LEFT_ID)) {
-                    screen.movePicture(
-                        LEFT_ID,
-                        1,
-                        w * 0.15 - offsetX, h * 0.3 + offsetY,
-                        FINAL_ZOOM_SCALE, FINAL_ZOOM_SCALE,
-                        255,
-                        0,
-                        FINAL_ZOOM_DURATION
-                    );
+                    screen.movePicture(LEFT_ID, 1, w * 0.15 - offsetX, h * 0.3 + offsetY, FINAL_ZOOM_SCALE, FINAL_ZOOM_SCALE, 255, 0, FINAL_ZOOM_DURATION);
                 }
                 if (screen.picture(RIGHT_ID)) {
-                    screen.movePicture(
-                        RIGHT_ID,
-                        1,
-                        w * 0.85 + offsetX, h * 0.3 + offsetY,
-                        FINAL_ZOOM_SCALE, FINAL_ZOOM_SCALE,
-                        255,
-                        0,
-                        FINAL_ZOOM_DURATION
-                    );
+                    screen.movePicture(RIGHT_ID, 1, w * 0.85 + offsetX, h * 0.3 + offsetY, FINAL_ZOOM_SCALE, FINAL_ZOOM_SCALE, 255, 0, FINAL_ZOOM_DURATION);
                 }
                 if (screen.picture(BOTTOM_LEFT_ID)) {
-                    screen.movePicture(
-                        BOTTOM_LEFT_ID,
-                        1,
-                        w * 0.15 - offsetX, h * 0.75 + offsetY,
-                        FINAL_ZOOM_SCALE, FINAL_ZOOM_SCALE,
-                        255,
-                        0,
-                        FINAL_ZOOM_DURATION
-                    );
+                    screen.movePicture(BOTTOM_LEFT_ID, 1, w * 0.15 - offsetX, h * 0.75 + offsetY, FINAL_ZOOM_SCALE, FINAL_ZOOM_SCALE, 255, 0, FINAL_ZOOM_DURATION);
                 }
                 if (screen.picture(BOTTOM_RIGHT_ID)) {
-                    screen.movePicture(
-                        BOTTOM_RIGHT_ID,
-                        1,
-                        w * 0.85 + offsetX, h * 0.75 + offsetY,
-                        FINAL_ZOOM_SCALE, FINAL_ZOOM_SCALE,
-                        255,
-                        0,
-                        FINAL_ZOOM_DURATION
-                    );
+                    screen.movePicture(BOTTOM_RIGHT_ID, 1, w * 0.85 + offsetX, h * 0.75 + offsetY, FINAL_ZOOM_SCALE, FINAL_ZOOM_SCALE, 255, 0, FINAL_ZOOM_DURATION);
                 }
 
                 state.phase          = 6;
@@ -1756,14 +1634,7 @@
             }
 
             if (state.overlayFrame === 0) {
-                screen.showPicture(
-                    OVERLAY_ID, name,
-                    1,
-                    w / 2, h / 2,
-                    100, 100,
-                    255,
-                    0
-                );
+                screen.showPicture(OVERLAY_ID, name, 1, w / 2, h / 2, 100, 100, 255, 0);
                 if (state.overlayIndex === 1) {
                     screen.erasePicture(CENTER_ID);
                 }
@@ -1790,36 +1661,14 @@
             }
 
             if (state.crossFrame === 0) {
-                screen.showPicture(
-                    OVERLAY_ID, nextBg,
-                    0,
-                    0, 0,
-                    100, 100,
-                    0,
-                    0
-                );
-                screen.movePicture(
-                    OVERLAY_ID,
-                    0,
-                    0, 0,
-                    100, 100,
-                    255,
-                    0,
-                    state.fadeDuration
-                );
+                screen.showPicture(OVERLAY_ID, nextBg, 0, 0, 0, 100, 100, 0, 0);
+                screen.movePicture(OVERLAY_ID, 0, 0, 0, 100, 100, 255, 0, state.fadeDuration);
             }
 
             state.crossFrame++;
 
             if (state.crossFrame >= state.fadeDuration) {
-                screen.showPicture(
-                    BG_ID, nextBg,
-                    0,
-                    0, 0,
-                    100, 100,
-                    255,
-                    0
-                );
+                screen.showPicture(BG_ID, nextBg, 0, 0, 0, 100, 100, 255, 0);
                 screen.erasePicture(OVERLAY_ID);
 
                 screen.erasePicture(CENTER_ID);
@@ -1841,36 +1690,14 @@
             }
 
             if (state.crossFrame === 0) {
-                screen.showPicture(
-                    OVERLAY_ID, extraBg,
-                    0,
-                    0, 0,
-                    100, 100,
-                    0,
-                    0
-                );
-                screen.movePicture(
-                    OVERLAY_ID,
-                    0,
-                    0, 0,
-                    100, 100,
-                    255,
-                    0,
-                    state.fadeDuration
-                );
+                screen.showPicture(OVERLAY_ID, extraBg, 0, 0, 0, 100, 100, 0, 0);
+                screen.movePicture(OVERLAY_ID, 0, 0, 0, 100, 100, 255, 0, state.fadeDuration);
             }
 
             state.crossFrame++;
 
             if (state.crossFrame >= state.fadeDuration) {
-                screen.showPicture(
-                    BG_ID, extraBg,
-                    0,
-                    0, 0,
-                    100, 100,
-                    255,
-                    0
-                );
+                screen.showPicture(BG_ID, extraBg, 0, 0, 0, 100, 100, 255, 0);
                 screen.erasePicture(OVERLAY_ID);
 
                 screen.erasePicture(CENTER_ID);
@@ -1888,28 +1715,12 @@
             const total2 = state.finalWaitDuration + state.charChangeWait;
 
             if (state.frame === total1 && state.finalChar1Name) {
-                screen.showPicture(
-                    CENTER_ID, state.finalChar1Name,
-                    1,
-                    state.baseCenterX,
-                    state.baseCenterY,
-                    100, 100,
-                    255,
-                    0
-                );
+                screen.showPicture(CENTER_ID, state.finalChar1Name, 1, state.baseCenterX, state.baseCenterY, 100, 100, 255, 0);
                 if (SE_FINAL_CHAR1) AudioManager.playSe(SE_FINAL_CHAR1);
             }
 
             if (state.frame === total2 && state.finalChar2Name) {
-                screen.showPicture(
-                    CENTER_ID, state.finalChar2Name,
-                    1,
-                    state.baseCenterX,
-                    state.baseCenterY,
-                    100, 100,
-                    255,
-                    0
-                );
+                screen.showPicture(CENTER_ID, state.finalChar2Name, 1, state.baseCenterX, state.baseCenterY, 100, 100, 255, 0);
                 state.awaitFinalInput = true;
                 state.enterBaseX      = state.baseCenterX;
                 state.enterBaseY      = state.baseCenterY;
@@ -1927,58 +1738,19 @@
                 if (EFFECT_PIC_NAME) {
                     const effX = w * EFFECT_PIC_X_RATE;
                     const effY = h * EFFECT_PIC_Y_RATE;
-                    screen.showPicture(
-                        EFFECT_PIC_ID,
-                        EFFECT_PIC_NAME,
-                        1,
-                        effX,
-                        effY,
-                        EFFECT_PIC_BASE_SCALE,
-                        EFFECT_PIC_BASE_SCALE,
-                        255,
-                        0
-                    );
+                    screen.showPicture(EFFECT_PIC_ID, EFFECT_PIC_NAME, 1, effX, effY, EFFECT_PIC_BASE_SCALE, EFFECT_PIC_BASE_SCALE, 255, 0);
                 }
 
-                if (state.gachaType === 4 &&
-                    state.topEffectName &&
-                    Math.random() < 0.7) {
+                if (state.gachaType === 4 && state.topEffectName && Math.random() < 0.7) {
                     const topX       = w / 2;
                     const topStartY  = -h * 0.3;
                     const topTargetY = h * 0.2;
-                    screen.showPicture(
-                        TOP_EFFECT_PIC_ID,
-                        state.topEffectName,
-                        1,
-                        topX,
-                        topStartY,
-                        100, 100,
-                        255,
-                        0
-                    );
+                    screen.showPicture(TOP_EFFECT_PIC_ID, state.topEffectName, 1, topX, topStartY, 100, 100, 255, 0);
                     if (SE_TOP_EFFECT) AudioManager.playSe(SE_TOP_EFFECT);
-                    screen.movePicture(
-                        TOP_EFFECT_PIC_ID,
-                        1,
-                        topX,
-                        topTargetY,
-                        100, 100,
-                        255,
-                        0,
-                        ENTER_SLIDE_DURATION
-                    );
+                    screen.movePicture(TOP_EFFECT_PIC_ID, 1, topX, topTargetY, 100, 100, 255, 0, ENTER_SLIDE_DURATION);
                 }
 
-                screen.movePicture(
-                    CENTER_ID,
-                    1,
-                    targetX,
-                    targetY,
-                    100, 100,
-                    255,
-                    0,
-                    ENTER_SLIDE_DURATION
-                );
+                screen.movePicture(CENTER_ID, 1, targetX, targetY, 100, 100, 255, 0, ENTER_SLIDE_DURATION);
 
                 state.awaitFinalInput   = false;
                 state.enterBaseX        = targetX;
@@ -2019,49 +1791,17 @@
 
                     screen.erasePicture(CENTER_ID);
 
-                    screen.showPicture(
-                        FINAL_CENTER_ID, name3,
-                        1,
-                        state.zoomStartX,
-                        state.zoomStartY,
-                        260, 260,
-                        255,
-                        0
-                    );
+                    screen.showPicture(FINAL_CENTER_ID, name3, 1, state.zoomStartX, state.zoomStartY, 260, 260, 255, 0);
                     if (SE_FINAL_CHAR3) AudioManager.playSe(SE_FINAL_CHAR3);
 
                     if (state.extraBottomDownName) {
-                        screen.showPicture(
-                            EXTRA_BOTTOM_DOWN_ID, state.extraBottomDownName,
-                            1,
-                            state.zoomStartX + EXTRA_BOTTOM_DOWN_START_OFFSET_X,
-                            state.zoomStartY + EXTRA_BOTTOM_DOWN_START_OFFSET_Y,
-                            260, 260,
-                            255,
-                            0
-                        );
+                        screen.showPicture(EXTRA_BOTTOM_DOWN_ID, state.extraBottomDownName, 1, state.zoomStartX + EXTRA_BOTTOM_DOWN_START_OFFSET_X, state.zoomStartY + EXTRA_BOTTOM_DOWN_START_OFFSET_Y, 260, 260, 255, 0);
                     }
                     if (state.extraBottomUpName) {
-                        screen.showPicture(
-                            EXTRA_BOTTOM_UP_ID, state.extraBottomUpName,
-                            1,
-                            state.zoomStartX + EXTRA_BOTTOM_UP_START_OFFSET_X,
-                            state.zoomStartY + EXTRA_BOTTOM_UP_START_OFFSET_Y,
-                            260, 260,
-                            255,
-                            0
-                        );
+                        screen.showPicture(EXTRA_BOTTOM_UP_ID, state.extraBottomUpName, 1, state.zoomStartX + EXTRA_BOTTOM_UP_START_OFFSET_X, state.zoomStartY + EXTRA_BOTTOM_UP_START_OFFSET_Y, 260, 260, 255, 0);
                     }
                     if (state.extraTopName) {
-                        screen.showPicture(
-                            EXTRA_TOP_ID, state.extraTopName,
-                            1,
-                            state.zoomStartX + EXTRA_TOP_START_OFFSET_X,
-                            state.zoomStartY + EXTRA_TOP_START_OFFSET_Y,
-                            260, 260,
-                            255,
-                            0
-                        );
+                        screen.showPicture(EXTRA_TOP_ID, state.extraTopName, 1, state.zoomStartX + EXTRA_TOP_START_OFFSET_X, state.zoomStartY + EXTRA_TOP_START_OFFSET_Y, 260, 260, 255, 0);
                     }
                 }
                 screen.erasePicture(EFFECT_PIC_ID);
@@ -2085,66 +1825,24 @@
                 const cx = baseX + dx;
                 const cy = baseY + dy;
 
-                screen.movePicture(
-                    FINAL_CENTER_ID,
-                    1,
-                    cx,
-                    cy,
-                    scale, scale,
-                    255,
-                    0,
-                    1
-                );
+                screen.movePicture(FINAL_CENTER_ID, 1, cx, cy, scale, scale, 255, 0, 1);
 
                 if (state.extraBottomDownName) {
-                    const offX = EXTRA_BOTTOM_DOWN_START_OFFSET_X +
-                                 (EXTRA_BOTTOM_DOWN_END_OFFSET_X - EXTRA_BOTTOM_DOWN_START_OFFSET_X) * ratio;
-                    const offY = EXTRA_BOTTOM_DOWN_START_OFFSET_Y +
-                                 (EXTRA_BOTTOM_DOWN_END_OFFSET_Y - EXTRA_BOTTOM_DOWN_START_OFFSET_Y) * ratio;
-                    screen.movePicture(
-                        EXTRA_BOTTOM_DOWN_ID,
-                        1,
-                        cx + offX,
-                        cy + offY,
-                        scale, scale,
-                        255,
-                        0,
-                        1
-                    );
+                    const offX = EXTRA_BOTTOM_DOWN_START_OFFSET_X + (EXTRA_BOTTOM_DOWN_END_OFFSET_X - EXTRA_BOTTOM_DOWN_START_OFFSET_X) * ratio;
+                    const offY = EXTRA_BOTTOM_DOWN_START_OFFSET_Y + (EXTRA_BOTTOM_DOWN_END_OFFSET_Y - EXTRA_BOTTOM_DOWN_START_OFFSET_Y) * ratio;
+                    screen.movePicture(EXTRA_BOTTOM_DOWN_ID, 1, cx + offX, cy + offY, scale, scale, 255, 0, 1);
                 }
 
                 if (state.extraBottomUpName) {
-                    const offX = EXTRA_BOTTOM_UP_START_OFFSET_X +
-                                 (EXTRA_BOTTOM_UP_END_OFFSET_X - EXTRA_BOTTOM_UP_START_OFFSET_X) * ratio;
-                    const offY = EXTRA_BOTTOM_UP_START_OFFSET_Y +
-                                 (EXTRA_BOTTOM_UP_END_OFFSET_Y - EXTRA_BOTTOM_UP_START_OFFSET_Y) * ratio;
-                    screen.movePicture(
-                        EXTRA_BOTTOM_UP_ID,
-                        1,
-                        cx + offX,
-                        cy + offY,
-                        scale, scale,
-                        255,
-                        0,
-                        1
-                    );
+                    const offX = EXTRA_BOTTOM_UP_START_OFFSET_X + (EXTRA_BOTTOM_UP_END_OFFSET_X - EXTRA_BOTTOM_UP_START_OFFSET_X) * ratio;
+                    const offY = EXTRA_BOTTOM_UP_START_OFFSET_Y + (EXTRA_BOTTOM_UP_END_OFFSET_Y - EXTRA_BOTTOM_UP_START_OFFSET_Y) * ratio;
+                    screen.movePicture(EXTRA_BOTTOM_UP_ID, 1, cx + offX, cy + offY, scale, scale, 255, 0, 1);
                 }
 
                 if (state.extraTopName) {
-                    const offX = EXTRA_TOP_START_OFFSET_X +
-                                 (EXTRA_TOP_END_OFFSET_X - EXTRA_TOP_START_OFFSET_X) * ratio;
-                    const offY = EXTRA_TOP_START_OFFSET_Y +
-                                 (EXTRA_TOP_END_OFFSET_Y - EXTRA_TOP_START_OFFSET_Y) * ratio;
-                    screen.movePicture(
-                        EXTRA_TOP_ID,
-                        1,
-                        cx + offX,
-                        cy + offY,
-                        scale, scale,
-                        255,
-                        0,
-                        1
-                    );
+                    const offX = EXTRA_TOP_START_OFFSET_X + (EXTRA_TOP_END_OFFSET_X - EXTRA_TOP_START_OFFSET_X) * ratio;
+                    const offY = EXTRA_TOP_START_OFFSET_Y + (EXTRA_TOP_END_OFFSET_Y - EXTRA_TOP_START_OFFSET_Y) * ratio;
+                    screen.movePicture(EXTRA_TOP_ID, 1, cx + offX, cy + offY, scale, scale, 255, 0, 1);
                 }
 
                 if (zoomT === ENTER_ZOOM_SHAKE_DURATION) {
@@ -2152,51 +1850,15 @@
                     const cxEnd = state.zoomEndX;
                     const cyEnd = state.zoomEndY;
 
-                    screen.showPicture(
-                        FINAL_CENTER_ID,
-                        name3,
-                        1,
-                        cxEnd,
-                        cyEnd,
-                        100, 100,
-                        255,
-                        0
-                    );
+                    screen.showPicture(FINAL_CENTER_ID, name3, 1, cxEnd, cyEnd, 100, 100, 255, 0);
                     if (state.extraBottomDownName) {
-                        screen.showPicture(
-                            EXTRA_BOTTOM_DOWN_ID,
-                            state.extraBottomDownName,
-                            1,
-                            cxEnd + EXTRA_BOTTOM_DOWN_END_OFFSET_X,
-                            cyEnd + EXTRA_BOTTOM_DOWN_END_OFFSET_Y,
-                            100, 100,
-                            255,
-                            0
-                        );
+                        screen.showPicture(EXTRA_BOTTOM_DOWN_ID, state.extraBottomDownName, 1, cxEnd + EXTRA_BOTTOM_DOWN_END_OFFSET_X, cyEnd + EXTRA_BOTTOM_DOWN_END_OFFSET_Y, 100, 100, 255, 0);
                     }
                     if (state.extraBottomUpName) {
-                        screen.showPicture(
-                            EXTRA_BOTTOM_UP_ID,
-                            state.extraBottomUpName,
-                            1,
-                            cxEnd + EXTRA_BOTTOM_UP_END_OFFSET_X,
-                            cyEnd + EXTRA_BOTTOM_UP_END_OFFSET_Y,
-                            100, 100,
-                            255,
-                            0
-                        );
+                        screen.showPicture(EXTRA_BOTTOM_UP_ID, state.extraBottomUpName, 1, cxEnd + EXTRA_BOTTOM_UP_END_OFFSET_X, cyEnd + EXTRA_BOTTOM_UP_END_OFFSET_Y, 100, 100, 255, 0);
                     }
                     if (state.extraTopName) {
-                        screen.showPicture(
-                            EXTRA_TOP_ID,
-                            state.extraTopName,
-                            1,
-                            cxEnd + EXTRA_TOP_END_OFFSET_X,
-                            cyEnd + EXTRA_TOP_END_OFFSET_Y,
-                            100, 100,
-                            255,
-                            0
-                        );
+                        screen.showPicture(EXTRA_TOP_ID, state.extraTopName, 1, cxEnd + EXTRA_TOP_END_OFFSET_X, cyEnd + EXTRA_TOP_END_OFFSET_Y, 100, 100, 255, 0);
                     }
 
                     state.phase = 12;
@@ -2204,16 +1866,7 @@
                 }
             } else {
                 const name3 = state.finalChar3Name || state.finalChar2Name || state.finalChar1Name;
-                screen.showPicture(
-                    FINAL_CENTER_ID,
-                    name3,
-                    1,
-                    state.zoomEndX,
-                    state.zoomEndY,
-                    100, 100,
-                    255,
-                    0
-                );
+                screen.showPicture(FINAL_CENTER_ID, name3, 1, state.zoomEndX, state.zoomEndY, 100, 100, 255, 0);
                 state.phase = 12;
                 state.frame = 0;
             }
@@ -2224,16 +1877,7 @@
             const cy  = state.zoomEndY;
 
             if (t === 1 && state.extraFadeName) {
-                screen.showPicture(
-                    EXTRA_FADE_ID,
-                    state.extraFadeName,
-                    1,
-                    cx,
-                    cy,
-                    100, 100,
-                    0,
-                    0
-                );
+                screen.showPicture(EXTRA_FADE_ID, state.extraFadeName, 1, cx, cy, 100, 100, 0, 0);
             }
 
             const clampedT = Math.min(t, dur);
@@ -2245,91 +1889,36 @@
             const name3 = state.finalChar3Name || state.finalChar2Name || state.finalChar1Name;
 
             if (name3) {
-                screen.movePicture(
-                    FINAL_CENTER_ID,
-                    1,
-                    cx,
-                    cy,
-                    100, 100,
-                    Math.round(fadeOutOpacity),
-                    0,
-                    1
-                );
+                screen.movePicture(FINAL_CENTER_ID, 1, cx, cy, 100, 100, Math.round(fadeOutOpacity), 0, 1);
             }
 
             if (state.extraTopName) {
-                screen.movePicture(
-                    EXTRA_TOP_ID,
-                    1,
-                    cx + EXTRA_TOP_END_OFFSET_X,
-                    cy + EXTRA_TOP_END_OFFSET_Y,
-                    100, 100,
-                    Math.round(fadeOutOpacity),
-                    0,
-                    1
-                );
+                screen.movePicture(EXTRA_TOP_ID, 1, cx + EXTRA_TOP_END_OFFSET_X, cy + EXTRA_TOP_END_OFFSET_Y, 100, 100, Math.round(fadeOutOpacity), 0, 1);
             }
 
             if (state.extraBottomUpName) {
                 const shrScale = 100 + (LAST_SHRINK_SCALE - 100) * ratio;
-                screen.movePicture(
-                    EXTRA_BOTTOM_UP_ID,
-                    1,
-                    cx + EXTRA_BOTTOM_UP_END_OFFSET_X,
-                    cy + EXTRA_BOTTOM_UP_END_OFFSET_Y,
-                    shrScale, shrScale,
-                    Math.round(fadeOutOpacity),
-                    0,
-                    1
-                );
+                screen.movePicture(EXTRA_BOTTOM_UP_ID, 1, cx + EXTRA_BOTTOM_UP_END_OFFSET_X, cy + EXTRA_BOTTOM_UP_END_OFFSET_Y, shrScale, shrScale, Math.round(fadeOutOpacity), 0, 1);
             }
 
             if (state.extraBottomDownName) {
                 const expScale = 100 + (LAST_EXPAND_SCALE - 100) * ratio;
-                screen.movePicture(
-                    EXTRA_BOTTOM_DOWN_ID,
-                    1,
-                    cx + EXTRA_BOTTOM_DOWN_END_OFFSET_X,
-                    cy + EXTRA_BOTTOM_DOWN_END_OFFSET_Y,
-                    expScale, expScale,
-                    Math.round(fadeOutOpacity),
-                    0,
-                    1
-                );
+                screen.movePicture(EXTRA_BOTTOM_DOWN_ID, 1, cx + EXTRA_BOTTOM_DOWN_END_OFFSET_X, cy + EXTRA_BOTTOM_DOWN_END_OFFSET_Y, expScale, expScale, Math.round(fadeOutOpacity), 0, 1);
             }
 
             if (state.extraFadeName) {
-                screen.movePicture(
-                    EXTRA_FADE_ID,
-                    1,
-                    cx,
-                    cy,
-                    100, 100,
-                    Math.round(fadeInOpacity),
-                    0,
-                    1
-                );
+                screen.movePicture(EXTRA_FADE_ID, 1, cx, cy, 100, 100, Math.round(fadeInOpacity), 0, 1);
             }
 
             if (t >= dur) {
                 if (state.extraFadeName) {
-                    screen.showPicture(
-                        EXTRA_FADE_ID,
-                        state.extraFadeName,
-                        1,
-                        cx,
-                        cy,
-                        100, 100,
-                        255,
-                        0
-                    );
+                    screen.showPicture(EXTRA_FADE_ID, state.extraFadeName, 1, cx, cy, 100, 100, 255, 0);
                 }
                 screen.erasePicture(FINAL_CENTER_ID);
                 screen.erasePicture(EXTRA_TOP_ID);
                 screen.erasePicture(EXTRA_BOTTOM_UP_ID);
                 screen.erasePicture(EXTRA_BOTTOM_DOWN_ID);
                 screen.erasePicture(EFFECT_PIC_ID);
-
 
                 state.phase = 13;
                 state.frame = 0;
@@ -2340,16 +1929,7 @@
 
             if (state.frame === 1) {
                 if (SHAKE_BG_NAME) {
-                    screen.showPicture(
-                        EXTRA_FADE_ID,
-                        SHAKE_BG_NAME,
-                        1,
-                        cx,
-                        cy,
-                        100, 100,
-                        255,
-                        0
-                    );
+                    screen.showPicture(EXTRA_FADE_ID, SHAKE_BG_NAME, 1, cx, cy, 100, 100, 255, 0);
                 }
             }
 
@@ -2364,51 +1944,22 @@
             const t = state.frame;
 
             if (t === 1 && BLINK_BG_NAME) {
-                screen.showPicture(
-                    BLINK_BG_ID,
-                    BLINK_BG_NAME,
-                    1,
-                    cx,
-                    cy,
-                    100, 100,
-                    0,
-                    0
-                );
+                screen.showPicture(BLINK_BG_ID, BLINK_BG_NAME, 1, cx, cy, 100, 100, 0, 0);
             }
 
             const dx = (Math.random() * 2 - 1) * SHAKE_MAX_AMP;
             const dy = (Math.random() * 2 - 1) * SHAKE_MAX_AMP;
 
-            const blinkOn = BLINK_BG_NAME
-                ? (Math.floor(t / BLINK_INTERVAL) % 2 === 0)
-                : false;
+            const blinkOn = BLINK_BG_NAME ? (Math.floor(t / BLINK_INTERVAL) % 2 === 0) : false;
 
             if (SHAKE_BG_NAME) {
                 const shakeOpacity = blinkOn ? 255 : 80;
-                screen.movePicture(
-                    EXTRA_FADE_ID,
-                    1,
-                    cx + dx,
-                    cy + dy,
-                    100, 100,
-                    shakeOpacity,
-                    0,
-                    1
-                );
+                screen.movePicture(EXTRA_FADE_ID, 1, cx + dx, cy + dy, 100, 100, shakeOpacity, 0, 1);
             }
 
             if (BLINK_BG_NAME) {
                 const blinkOpacity = blinkOn ? 0 : 255;
-                screen.movePicture(
-                    BLINK_BG_ID,
-                    1,
-                    cx + dx,
-                    cy + dy,
-                    100, 100,
-                    blinkOpacity,
-                    0,
-                    1
-                );
+                screen.movePicture(BLINK_BG_ID, 1, cx + dx, cy + dy, 100, 100, blinkOpacity, 0, 1);
             }
 
             if (t >= BLINK_TOTAL_FRAMES) {
@@ -2429,83 +1980,25 @@
             const ratio = Math.min(1.0, t / d);
 
             if (t === 1) {
-                this.showPicture(
-                    OVERLAY_ID,
-                    FINAL_BG_NAME,
-                    0,
-                    0, 0,
-                    100, 100,
-                    0,
-                    0
-                );
+                this.showPicture(OVERLAY_ID, FINAL_BG_NAME, 0, 0, 0, 100, 100, 0, 0);
             }
 
-            this.movePicture(
-                OVERLAY_ID,
-                0,
-                0, 0,
-                100, 100,
-                Math.round(255 * ratio),
-                0,
-                1
-            );
+            this.movePicture(OVERLAY_ID, 0, 0, 0, 100, 100, Math.round(255 * ratio), 0, 1);
 
             const fadeOutOpacity = Math.round(255 * (1.0 - ratio));
 
-            this.movePicture(
-                EXTRA_FADE_ID,
-                1,
-                cx, cy,
-                100, 100,
-                fadeOutOpacity,
-                0,
-                1
-            );
+            this.movePicture(EXTRA_FADE_ID, 1, cx, cy, 100, 100, fadeOutOpacity, 0, 1);
 
             const blinkPic = this.picture(BLINK_BG_ID);
             if (blinkPic) {
-                this.movePicture(
-                    BLINK_BG_ID,
-                    1,
-                    cx, cy,
-                    100, 100,
-                    fadeOutOpacity,
-                    0,
-                    1
-                );
+                this.movePicture(BLINK_BG_ID, 1, cx, cy, 100, 100, fadeOutOpacity, 0, 1);
             }
 
-            this.movePicture(
-                MOVING_PIC_ID,
-                1,
-                this.picture(MOVING_PIC_ID)?.x() || cx,
-                this.picture(MOVING_PIC_ID)?.y() || cy,
-                100, 100,
-                fadeOutOpacity,
-                0,
-                1
-            );
-            this.movePicture(
-                SECOND_MOVING_PIC_ID,
-                1,
-                this.picture(SECOND_MOVING_PIC_ID)?.x() || cx,
-                this.picture(SECOND_MOVING_PIC_ID)?.y() || cy,
-                100, 100,
-                fadeOutOpacity,
-                0,
-                1
-            );
+            this.movePicture(MOVING_PIC_ID, 1, this.picture(MOVING_PIC_ID)?.x() || cx, this.picture(MOVING_PIC_ID)?.y() || cy, 100, 100, fadeOutOpacity, 0, 1);
+            this.movePicture(SECOND_MOVING_PIC_ID, 1, this.picture(SECOND_MOVING_PIC_ID)?.x() || cx, this.picture(SECOND_MOVING_PIC_ID)?.y() || cy, 100, 100, fadeOutOpacity, 0, 1);
 
             if (t >= d) {
-                this.showPicture(
-                    BG_ID,
-                    FINAL_BG_NAME,
-                    0,
-                    0, 0,
-                    100, 100,
-                    255,
-                    0
-                );
+                this.showPicture(BG_ID, FINAL_BG_NAME, 0, 0, 0, 100, 100, 255, 0);
 
                 this.erasePicture(OVERLAY_ID);
                 this.erasePicture(EXTRA_FADE_ID);
@@ -2546,29 +2039,11 @@
 
             if (t === 1) {
                 if (name1) {
-                    screen.showPicture(
-                        PAIR1_ID,
-                        name1,
-                        1,
-                        cx,
-                        cy,
-                        100, 100,
-                        255,
-                        0
-                    );
+                    screen.showPicture(PAIR1_ID, name1, 1, cx, cy, 100, 100, 255, 0);
                     if (SE_PAIR1) AudioManager.playSe(SE_PAIR1);
                 }
                 if (name2) {
-                    screen.showPicture(
-                        PAIR2_ID,
-                        name2,
-                        1,
-                        cx,
-                        cy,
-                        80, 80,
-                        0,
-                        0
-                    );
+                    screen.showPicture(PAIR2_ID, name2, 1, cx, cy, 80, 80, 0, 0);
                 }
             }
 
@@ -2578,31 +2053,13 @@
             if (name1) {
                 const scale1   = 100 + (PAIR1_ZOOM_SCALE - 100) * ratio;
                 const opacity1 = Math.round(255 * (1.0 - ratio));
-                screen.movePicture(
-                    PAIR1_ID,
-                    1,
-                    cx,
-                    cy,
-                    scale1, scale1,
-                    opacity1,
-                    0,
-                    1
-                );
+                screen.movePicture(PAIR1_ID, 1, cx, cy, scale1, scale1, opacity1, 0, 1);
             }
 
             if (name2) {
                 const scale2   = 80 + (PAIR2_ZOOM_SCALE - 80) * ratio;
                 const opacity2 = Math.round(255 * ratio);
-                screen.movePicture(
-                    PAIR2_ID,
-                    1,
-                    cx,
-                    cy,
-                    scale2, scale2,
-                    opacity2,
-                    0,
-                    1
-                );
+                screen.movePicture(PAIR2_ID, 1, cx, cy, scale2, scale2, opacity2, 0, 1);
             }
 
             if (t >= d) {
@@ -2618,7 +2075,7 @@
                 state.frame = 0;
             }
         } else if (state.phase === 18) {
-            let candidates = [];
+            const candidates = [];
             if (state.gachaType === 2) {
                 if (state.lastRotate2Name) candidates.push(state.lastRotate2Name);
                 if (state.lastRotate3Name) candidates.push(state.lastRotate3Name);
@@ -2652,10 +2109,9 @@
             const cy = h / 2;
             const t  = state.frame;
 
-            // 設定1だけラスト回転演出を短縮
             let speedRate = 1.0;
             if (state.gachaType === 1) {
-                speedRate = 0.6; // 時間を少し短く
+                speedRate = 0.6;
             }
 
             const fadeInEnd  = Math.max(1, Math.round(LAST_ROTATE_FADEIN_DURATION  * speedRate));
@@ -2663,16 +2119,7 @@
             const fadeOutEnd = stayEnd   + Math.max(1, Math.round(LAST_ROTATE_FADEOUT_DURATION * speedRate));
 
             if (t === 1) {
-                screen.showPicture(
-                    LAST_ROTATE_ID,
-                    name,
-                    1,
-                    cx,
-                    cy,
-                    100, 100,
-                    0,
-                    0
-                );
+                screen.showPicture(LAST_ROTATE_ID, name, 1, cx, cy, 100, 100, 0, 0);
             }
 
             let opacity = 255;
@@ -2692,16 +2139,7 @@
                 return;
             }
 
-            screen.movePicture(
-                LAST_ROTATE_ID,
-                1,
-                cx,
-                cy,
-                100, 100,
-                opacity,
-                0,
-                1
-            );
+            screen.movePicture(LAST_ROTATE_ID, 1, cx, cy, 100, 100, opacity, 0, 1);
         }
     };
 
@@ -2738,6 +2176,7 @@
         const rightName       = String(args.rightName || "");
         const bottomLeftName  = String(args.bottomLeftName || "");
         const bottomRightName = String(args.bottomRightName || "");
+
         showSceneSimple(bgName, centerName, leftName, rightName, bottomLeftName, bottomRightName);
     });
 
@@ -2829,9 +2268,11 @@
             altExtraBgName,
             altMeteorName
         );
+
+        this.setWaitMode("gachaAnime");
     });
 
-    PluginManager.registerCommand(PLUGIN_NAME, "ClearScene", function(args) {
+    PluginManager.registerCommand(PLUGIN_NAME, "ClearScene", function() {
         const screen = $gameScreen;
         screen.erasePicture(BG_ID);
         screen.erasePicture(CENTER_ID);
@@ -2857,8 +2298,11 @@
         if (screen._gachaAnimeState) {
             screen._gachaAnimeState.active          = false;
             screen._gachaAnimeState.awaitFinalInput = false;
+            screen._gachaAnimeState.preloading      = false;
+            screen._gachaAnimeState.preloadStarted  = false;
+            screen._gachaAnimeState.preloadBitmaps  = [];
+            screen._gachaAnimeState.pendingSetup    = null;
             stopGachaBgm(screen._gachaAnimeState);
         }
     });
-
 })();
