@@ -1,6 +1,6 @@
 /*:
  * @target MZ
- * @plugindesc 指定した敵イラストを img/pictures から常駐プリロードするプラグイン v1.0
+ * @plugindesc 指定した敵イラストを img/pictures から常駐プリロードするプラグイン v1.1
  * @author ChatGPT
  *
  * @param PictureNames
@@ -69,6 +69,10 @@
             this.preloadAll();
         },
 
+        loadBitmapByName(name) {
+            return ImageManager.loadBitmap("img/pictures/", name);
+        },
+
         preloadAll() {
             for (const name of PICTURE_NAMES) {
                 this.ensureLoaded(name);
@@ -79,11 +83,12 @@
             if (!name) return null;
 
             let bitmap = this._bitmaps.get(name);
+
             if (bitmap && !bitmap.isError()) {
                 return bitmap;
             }
 
-            bitmap = ImageManager.loadPicture(name);
+            bitmap = this.loadBitmapByName(name);
             this._bitmaps.set(name, bitmap);
 
             bitmap.addLoadListener(() => {
@@ -110,10 +115,14 @@
         refreshMissing() {
             for (const name of PICTURE_NAMES) {
                 const bitmap = this._bitmaps.get(name);
-                if (!bitmap || bitmap.isError()) {
+                if (!bitmap || bitmap.isError() || !bitmap.isReady()) {
                     this.ensureLoaded(name);
                 }
             }
+        },
+
+        getBitmap(name) {
+            return this._bitmaps.get(name) || null;
         },
 
         debugDump() {

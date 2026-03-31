@@ -1,6 +1,6 @@
 /*:
  * @target MZ
- * @plugindesc カードガチャ（単発・10連）＋弾切替（左右キー）＋弾ごと背景画像＋弾解放スイッチ＋石（弾別アイテム）消費制限＋メニュー置換（formation→gacha） v22.2
+ * @plugindesc カードガチャ（単発・10連）＋弾切替（左右キー）＋弾ごと背景画像＋弾解放スイッチ＋石（弾別アイテム）消費制限＋メニュー置換（formation→gacha） v22.3 排出画像先読み対応
  * @author 悟空
  *
  * @help
@@ -34,6 +34,11 @@
  * ■追加（v22.2）
  * ・UnlockSwitches が全部0ならメニューにガチャを出さない
  * ・メニュー表示用の主スイッチ（MenuEnableSwitch）を追加（OFFなら出さない）
+ *
+ * ■追加（v22.3）
+ * ・抽選で排出されたカード画像を演出開始前に先読み
+ * ・先読み完了後に演出開始
+ * ・結果表示時は先読み済みBitmapを優先利用
  *
  * @command OpenGacha
  * @text ガチャを開く
@@ -393,17 +398,41 @@
     return true;
   }
 
+  function loadCardPictureBitmapByArmorId(armorId) {
+    return ImageManager.loadBitmap("img/pictures/", "card" + armorId);
+  }
+
+  function preloadDrawResultPictures(results) {
+    const ids = [...new Set((results || []).map(r => r && r.armor ? r.armor.id : 0).filter(id => id > 0))];
+    return ids.map(id => loadCardPictureBitmapByArmorId(id));
+  }
+
+  function areBitmapsReady(bitmaps) {
+    if (!bitmaps || bitmaps.length === 0) return true;
+    return bitmaps.every(bitmap => bitmap && bitmap.isReady());
+  }
+
+  function drawCardBitmapFit(window, bitmap, topY) {
+    if (!window || !bitmap || !bitmap.isReady()) return;
+    const scale = Math.min(
+      window.contents.width / bitmap.width,
+      (window.contents.height - topY) / bitmap.height,
+      1
+    );
+    const dw = bitmap.width * scale;
+    const dh = bitmap.height * scale;
+    const dx = (window.contents.width - dw) / 2;
+    const dy = topY;
+    window.contents.blt(bitmap, 0, 0, bitmap.width, bitmap.height, dx, dy, dw, dh);
+  }
+
   // =========================
   // メニューにガチャを出すか
   // =========================
   function shouldShowGachaInMenu() {
-    // 主スイッチが指定されていてOFFなら出さない
     if (MENU_ENABLE_SWITCH > 0 && !$gameSwitches.value(MENU_ENABLE_SWITCH)) return false;
-
-    // 解放スイッチが全部0なら出さない
     const allUnlockZero = unlockSwitches.every(sw => !Number(sw || 0));
     if (allUnlockZero) return false;
-
     return true;
   }
 
@@ -429,7 +458,6 @@
     SceneManager.push(Scene_Gacha);
   });
 
-  /* formation を消して，そこにガチャを入れる */
   Window_MenuCommand.prototype.addFormationCommand = function () {
     if (!shouldShowGachaInMenu()) return;
     this.addCommand("ガチャ", "gacha", true);
@@ -447,7 +475,7 @@
     }
 
     createCancelButton() {
-      // TouchUI の右上キャンセルボタン（戻るボタン）を出さない
+      // TouchUI の右上キャンセルボタンを出さない
     }
 
     create() {
@@ -478,6 +506,10 @@
 
       this._resultWindow = null;
       this._nextWindow = null;
+
+      this._pendingResultPreloadBitmaps = [];
+      this._pendingStartAnimeType = 0;
+      this._pendingSkipAnimeToResult = false;
 
       this.createConfirmWindow();
       this.refreshBannerVisuals();
@@ -512,7 +544,7 @@
       const bmp = ImageManager.loadPicture(name);
       this._bgSprite.bitmap = bmp;
 
-      bmp.addLoadListener(() => {
+      if (bmp.isReady()) {
         const sw = Graphics.boxWidth;
         const sh = Graphics.boxHeight;
         const scale = Math.max(sw / bmp.width, sh / bmp.height) * 1.05;
@@ -520,11 +552,25 @@
         this._bgSprite.scale.y = scale;
         this._bgSprite.x = (sw - bmp.width * scale) / 2;
         this._bgSprite.y = (sh - bmp.height * scale) / 2;
-      });
+      } else {
+        bmp.addLoadListener(() => {
+          const sw = Graphics.boxWidth;
+          const sh = Graphics.boxHeight;
+          const scale = Math.max(sw / bmp.width, sh / bmp.height) * 1.05;
+          this._bgSprite.scale.x = scale;
+          this._bgSprite.scale.y = scale;
+          this._bgSprite.x = (sw - bmp.width * scale) / 2;
+          this._bgSprite.y = (sh - bmp.height * scale) / 2;
+        });
+      }
     }
 
     isInResultFlow() {
-      return !!this._resultWindow || !!this._nextWindow || this._waitingAnime || this._afterAnimeWait > 0;
+      return !!this._resultWindow ||
+             !!this._nextWindow ||
+             this._waitingAnime ||
+             this._afterAnimeWait > 0 ||
+             this._pendingResultPreloadBitmaps.length > 0;
     }
 
     refreshBannerVisuals() {
@@ -538,6 +584,28 @@
 
       $gameScreen.update();
       if (this._spriteset) this._spriteset.update();
+
+      if (this._pendingResultPreloadBitmaps.length > 0) {
+        if (!areBitmapsReady(this._pendingResultPreloadBitmaps)) {
+          return;
+        }
+
+        const gachaType = this._pendingStartAnimeType;
+        const skipAnime = this._pendingSkipAnimeToResult;
+
+        this._pendingResultPreloadBitmaps = [];
+        this._pendingStartAnimeType = 0;
+        this._pendingSkipAnimeToResult = false;
+
+        if (!skipAnime && playGachaAnimeByType(gachaType)) {
+          this._waitingAnime = true;
+          this._afterAnimeWait = 0;
+        } else {
+          clearGachaAnimeScreen();
+          this.startResultDisplay();
+        }
+        return;
+      }
 
       if (this._confirmWindow && this._confirmWindow.active && !this.isInResultFlow()) {
         if (Input.isTriggered("right")) {
@@ -614,6 +682,17 @@
       return { armor, rarity: r };
     }
 
+    beginDrawFlow() {
+      const gachaType = calcGachaTypeFromMaxRarity(this._gachaMaxRarity);
+      this._pendingResultPreloadBitmaps = preloadDrawResultPictures(this._cards);
+      this._pendingStartAnimeType = gachaType;
+      this._pendingSkipAnimeToResult = false;
+
+      if (this._pendingResultPreloadBitmaps.length === 0) {
+        this._pendingSkipAnimeToResult = false;
+      }
+    }
+
     doSingle() {
       if (!isBannerUnlocked(this._bannerIndex0)) return;
       if (!canGachaBanner(this._bannerIndex0, SINGLE_COST)) return;
@@ -622,15 +701,7 @@
       this.setBannerBackgroundVisible(false);
       this._confirmWindow.hide();
       this.prepareDraw(1);
-
-      const gachaType = calcGachaTypeFromMaxRarity(this._gachaMaxRarity);
-      if (playGachaAnimeByType(gachaType)) {
-        this._waitingAnime = true;
-        this._afterAnimeWait = 0;
-      } else {
-        clearGachaAnimeScreen();
-        this.startResultDisplay();
-      }
+      this.beginDrawFlow();
     }
 
     doTen() {
@@ -641,15 +712,7 @@
       this.setBannerBackgroundVisible(false);
       this._confirmWindow.hide();
       this.prepareDraw(10);
-
-      const gachaType = calcGachaTypeFromMaxRarity(this._gachaMaxRarity);
-      if (playGachaAnimeByType(gachaType)) {
-        this._waitingAnime = true;
-        this._afterAnimeWait = 0;
-      } else {
-        clearGachaAnimeScreen();
-        this.startResultDisplay();
-      }
+      this.beginDrawFlow();
     }
 
     startResultDisplay() {
@@ -739,10 +802,12 @@
       this._gachaMaxRarity = 0;
       this._waitingAnime = false;
       this._afterAnimeWait = 0;
+      this._pendingResultPreloadBitmaps = [];
+      this._pendingStartAnimeType = 0;
+      this._pendingSkipAnimeToResult = false;
 
       clearGachaAnimeScreen();
 
-      // 弾選択に戻ったら待機BGMを復帰（同一なら何もしない）
       playWaitBgmIfNeeded();
 
       this._confirmWindow.show();
@@ -906,19 +971,28 @@
       this.resetTextColor();
       this.drawText(this._armor.name, 0, this.lineHeight(), this.contents.width, "center");
 
-      const bitmap = ImageManager.loadPicture("card" + this._armor.id);
-      bitmap.addLoadListener(() => {
-        const scale = Math.min(
-          this.contents.width / bitmap.width,
-          (this.contents.height - this.lineHeight() * 3) / bitmap.height,
-          1
-        );
-        const dw = bitmap.width * scale;
-        const dh = bitmap.height * scale;
-        const dx = (this.contents.width - dw) / 2;
-        const dy = this.lineHeight() * 3;
-        this.contents.blt(bitmap, 0, 0, bitmap.width, bitmap.height, dx, dy, dw, dh);
-      });
+      const bitmap = loadCardPictureBitmapByArmorId(this._armor.id);
+      const topY = this.lineHeight() * 3;
+
+      if (bitmap.isReady()) {
+        drawCardBitmapFit(this, bitmap, topY);
+      } else {
+        bitmap.addLoadListener(() => {
+          this.contents.clear();
+          this.changeTextColor(ColorManager.systemColor());
+          this.drawText(`${this._index + 1}/${this._total}`, 0, 0, 200, "left");
+          if (this._rarity === 5) {
+            this.changeTextColor(ColorManager.crisisColor());
+            this.drawText("★".repeat(this._rarity), 0, 0, this.contents.width, "center");
+          } else {
+            this.changeTextColor(ColorManager.textColor(17));
+            this.drawText("★".repeat(this._rarity), 0, 0, this.contents.width, "center");
+          }
+          this.resetTextColor();
+          this.drawText(this._armor.name, 0, this.lineHeight(), this.contents.width, "center");
+          drawCardBitmapFit(this, bitmap, topY);
+        });
+      }
     }
   }
 
@@ -938,8 +1012,9 @@
       const cellH = this.contents.height / rows;
 
       this._results.forEach((r, i) => {
-        const bitmap = ImageManager.loadPicture("card" + r.armor.id);
-        bitmap.addLoadListener(() => {
+        const bitmap = loadCardPictureBitmapByArmorId(r.armor.id);
+
+        const draw = () => {
           const scale = Math.min(cellW / bitmap.width, cellH / bitmap.height, 1);
           const dw = bitmap.width * scale;
           const dh = bitmap.height * scale;
@@ -948,7 +1023,13 @@
           const dx = col * cellW + (cellW - dw) / 2;
           const dy = row * cellH + (cellH - dh) / 2;
           this.contents.blt(bitmap, 0, 0, bitmap.width, bitmap.height, dx, dy, dw, dh);
-        });
+        };
+
+        if (bitmap.isReady()) {
+          draw();
+        } else {
+          bitmap.addLoadListener(draw);
+        }
       });
     }
   }
