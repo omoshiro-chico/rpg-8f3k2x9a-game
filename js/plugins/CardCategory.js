@@ -33,7 +33,7 @@
 (() => {
   "use strict";
 
-  const PLUGIN_NAME = "CardBook";
+  const PLUGIN_NAME = "CardCategory";
   const params = PluginManager.parameters(PLUGIN_NAME);
 
   const START_ID = 101;      // カード防具の開始ID
