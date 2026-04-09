@@ -496,7 +496,7 @@
     const params = PluginManager.parameters(PLUGIN_NAME);
     const GACHA_BGM = {
         name:   String(params["GachaBgmName"] || ""),
-        volume: Number(params["GachaBgmVolume"] || 90),
+        volume: Number(params["GachaBgmVolume"] || 60),
         pitch:  Number(params["GachaBgmPitch"] || 100),
         pan:    Number(params["GachaBgmPan"] || 0),
     };

@@ -446,7 +446,7 @@
     const curName = cur && cur.name ? String(cur.name) : "";
     if (curName === GACHA_BGM_NAME) return;
 
-    AudioManager.playBgm({ name: GACHA_BGM_NAME, pan: 0, pitch: 100, volume: 90 });
+    AudioManager.playBgm({ name: GACHA_BGM_NAME, pan: 0, pitch: 100, volume: 80 });
   }
 
   // =========================
