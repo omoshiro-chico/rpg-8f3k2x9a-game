@@ -199,5 +199,6 @@ null,
 {"id":197,"atypeId":1,"description":"CH＝CATASTROPHEの示唆\nスキル「エクストリームラビット」を使用可能","etypeId":6,"traits":[{"code":43,"dataId":80,"value":1}],"iconIndex":0,"name":"ラビットカタストロフ","note":"<rarity:3>\n<SellExp: 5000>","params":[0,0,0,0,200,200,0,0],"price":0},
 {"id":198,"atypeId":1,"description":"整形OLとは関係ない\n仲間をかばう","etypeId":6,"traits":[{"code":62,"dataId":2,"value":1}],"iconIndex":0,"name":"らびっと(ミニ)","note":"<rarity:3>\n<SellExp: 5000>","params":[0,0,0,200,0,200,0,0],"price":0},
 {"id":199,"atypeId":1,"description":"大男大酷評大冷笑\n会心が100％発動する","etypeId":6,"traits":[{"code":22,"dataId":2,"value":9.99},{"code":22,"dataId":0,"value":9.99}],"iconIndex":0,"name":"らびっとch","note":"<rarity:4>\n<SellExp: 10000>","params":[2,0,200,0,200,0,0,0],"price":0},
-{"id":200,"atypeId":1,"description":"うわ！れのさんだ！これ喜ぶだろうなぁ\n敵の攻撃を確定で回避する","etypeId":6,"traits":[{"code":22,"dataId":1,"value":1}],"iconIndex":0,"name":"れの","note":"<rarity:5>\n<SellExp: 20000>","params":[200,200,0,0,0,0,0,0],"price":0}
+{"id":200,"atypeId":1,"description":"うわ！れのさんだ！これ喜ぶだろうなぁ\n敵の攻撃を確定で回避する","etypeId":6,"traits":[{"code":22,"dataId":1,"value":1}],"iconIndex":0,"name":"れの","note":"<rarity:5>\n<SellExp: 20000>","params":[200,200,0,0,0,0,0,0],"price":0},
+{"id":201,"atypeId":0,"description":"","etypeId":2,"traits":[{"code":22,"dataId":1,"value":0}],"iconIndex":0,"name":"","note":"","params":[0,0,0,0,0,0,0,0],"price":0}
 ]
